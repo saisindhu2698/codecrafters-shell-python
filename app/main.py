@@ -25,16 +25,16 @@ def main():
         if not command:
             continue
         
-        # Check if there is output redirection using > or 1>
-        if '>' in command:
-            parts = command.split('>')
-            command_part = parts[0].strip()
-            file_path = parts[1].strip()
-
-            # Check if we have an explicit 1> or just >
-            if command_part == "":
-                print("bash: syntax error: unexpected '>'")
-                continue
+        # Check for output redirection '>' or '1>'
+        if '>' in command or '1>' in command:
+            if '1>' in command:
+                parts = command.split('1>')
+                command_part = parts[0].strip()
+                file_path = parts[1].strip()
+            else:
+                parts = command.split('>')
+                command_part = parts[0].strip()
+                file_path = parts[1].strip()
 
             # Parse the command using shlex to handle quotes and spaces
             parts = shlex.split(command_part)
@@ -43,7 +43,6 @@ def main():
 
             # Check if file path is provided correctly
             try:
-                # Open the file in write mode and redirect the output of the command to this file
                 with open(file_path, 'w') as f:
                     subprocess.run([cmd_name] + args, stdout=f, check=True)
             except FileNotFoundError:
@@ -51,7 +50,7 @@ def main():
             except Exception as e:
                 print(f"{cmd_name}: failed to execute: {e}")
         else:
-            # Normal command without output redirection
+            # Handle normal command without redirection
             parts = shlex.split(command)
             cmd_name = parts[0]
             args = parts[1:]
@@ -65,7 +64,6 @@ def main():
                     continue
             elif cmd_name == "echo":
                 # Echo command should print exactly what is in the arguments
-                # Here, ensure `1>` is not included in the output
                 print(" ".join(args))
             elif cmd_name == "type":
                 if args:
