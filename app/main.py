@@ -25,7 +25,7 @@ def main():
         if not command:
             continue
         
-        # Use shlex.split to handle quoting, including single quotes
+        # Use shlex.split to handle quoting (including double quotes) correctly
         parts = shlex.split(command)
         cmd_name = parts[0]
         args = parts[1:]
