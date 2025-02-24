@@ -11,6 +11,45 @@ def find_executable(command):
             return exe_path
     return None
 
+def mysplit(input):
+    res = ['']
+    current_quote = ''
+    i = 0
+
+    while i < len(input):
+        c = input[i]
+        if c == '\\':
+            ch = input[i+1]
+            if current_quote == "'":
+                res[-1] += c
+            elif current_quote == '"':
+                if ch in ['\\', '$', '"', '\n']:
+                    res[-1] += ch
+                else:
+                    res[-1] += '\\' + ch
+                i += 1
+            else:
+                res[-1] += input[i+1]
+                i += 1
+        elif c in ['"',"'"]:
+            if current_quote == '':
+                current_quote = c
+            elif current_quote == c:
+                current_quote = ''
+            else:
+                res[-1] += c
+        elif c == ' ' and current_quote == '':
+            if res[-1] != '':
+                res.append('')
+        else:
+            res[-1] += c
+        i += 1
+        
+    if res[-1] == '':
+        res.pop()
+
+    return res
+
 def main():
     builtins = {"echo", "exit", "type", "pwd", "cd"}
     
@@ -25,36 +64,33 @@ def main():
         if not command:
             continue
         
-        # Check for output redirection '>' or '1>'
-        if '>' in command or '1>' in command:
-            if '1>' in command:
-                parts = command.split('1>')
-                command_part = parts[0].strip()
-                file_path = parts[1].strip()
-            else:
-                parts = command.split('>')
-                command_part = parts[0].strip()
-                file_path = parts[1].strip()
+        # Split the command properly using mysplit function
+        inp = mysplit(command)
+        
+        # Check if there is output redirection using > or 1>
+        to_redirect = None
+        if '1>' in inp:
+            idx = inp.index('1>')
+            inp, to_redirect = inp[:idx], inp[idx+1]
+        elif '>' in inp:
+            idx = inp.index('>')
+            inp, to_redirect = inp[:idx], inp[idx+1]
 
-            # Parse the command using shlex to handle quotes and spaces
-            parts = shlex.split(command_part)
-            cmd_name = parts[0]
-            args = parts[1:]
+        # Parse the command using shlex to handle quotes and spaces
+        cmd_name = inp[0]
+        args = inp[1:]
 
-            # Check if file path is provided correctly
+        # Handle output redirection
+        if to_redirect:
             try:
-                with open(file_path, 'w') as f:
+                with open(to_redirect, 'w') as f:
                     subprocess.run([cmd_name] + args, stdout=f, check=True)
             except FileNotFoundError:
-                print(f"{cmd_name}: {file_path}: No such file or directory")
+                print(f"{cmd_name}: {to_redirect}: No such file or directory")
             except Exception as e:
                 print(f"{cmd_name}: failed to execute: {e}")
         else:
-            # Handle normal command without redirection
-            parts = shlex.split(command)
-            cmd_name = parts[0]
-            args = parts[1:]
-            
+            # Handle normal command execution without redirection
             if cmd_name == "exit":
                 try:
                     exit_code = int(args[0]) if args else 0
@@ -104,9 +140,8 @@ def main():
                 if exe_path:
                     try:
                         subprocess.run([cmd_name] + args, check=True)
-                    except subprocess.CalledProcessError:
-                        # Suppress error messages on failure
-                        pass  # Command failed silently, just print the prompt next
+                    except subprocess.CalledProcessError as e:
+                        print(f"{cmd_name}: process exited with status {e.returncode}")
                     except Exception as e:
                         print(f"{cmd_name}: failed to execute: {e}")
                 else:
