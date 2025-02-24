@@ -25,66 +25,91 @@ def main():
         if not command:
             continue
         
-        # Use shlex.split to handle quoting (including double quotes) correctly
-        parts = shlex.split(command)
-        cmd_name = parts[0]
-        args = parts[1:]
-        
-        if cmd_name == "exit":
-            try:
-                exit_code = int(args[0]) if args else 0
-                sys.exit(exit_code)
-            except ValueError:
-                print("exit: invalid argument")
+        # Check if there is output redirection using > or 1>
+        if '>' in command:
+            parts = command.split('>')
+            command_part = parts[0].strip()
+            file_path = parts[1].strip()
+
+            # Check if we have an explicit 1> or just >
+            if command_part == "":
+                print("bash: syntax error: unexpected '>'")
                 continue
-        elif cmd_name == "echo":
-            print(" ".join(args))
-        elif cmd_name == "type":
-            if args:
-                target_cmd = args[0]
-                if target_cmd in builtins:
-                    print(f"{target_cmd} is a shell builtin")
-                else:
-                    exe_path = find_executable(target_cmd)
-                    if exe_path:
-                        print(f"{target_cmd} is {exe_path}")
-                    else:
-                        print(f"{target_cmd}: not found")
-            else:
-                print("type: missing argument")
-        elif cmd_name == "pwd":
-            print(os.getcwd())
-        elif cmd_name == "cd":
-            if len(args) != 1:
-                print("cd: too many arguments")
-            else:
-                path = args[0]
-                # Handle the ~ character for the user's home directory.
-                if path == "~":
-                    home = os.getenv("HOME")
-                    if home is None:
-                        print("cd: HOME environment variable not set")
-                        continue
-                    path = home
-                try:
-                    os.chdir(path)
-                except FileNotFoundError:
-                    print(f"cd: {args[0]}: No such file or directory")
-                except NotADirectoryError:
-                    print(f"cd: {args[0]}: Not a directory")
-                except PermissionError:
-                    print(f"cd: {args[0]}: Permission denied")
+
+            # Parse the command using shlex to handle quotes and spaces
+            parts = shlex.split(command_part)
+            cmd_name = parts[0]
+            args = parts[1:]
+
+            # Check if file path is provided correctly
+            try:
+                # Open the file in write mode and redirect the output of the command to this file
+                with open(file_path, 'w') as f:
+                    subprocess.run([cmd_name] + args, stdout=f, check=True)
+            except FileNotFoundError:
+                print(f"{cmd_name}: {file_path}: No such file or directory")
+            except Exception as e:
+                print(f"{cmd_name}: failed to execute: {e}")
         else:
-            exe_path = find_executable(cmd_name)
-            if exe_path:
+            # Normal command without output redirection
+            parts = shlex.split(command)
+            cmd_name = parts[0]
+            args = parts[1:]
+            
+            if cmd_name == "exit":
                 try:
-                    subprocess.run([cmd_name] + args, check=True)
-                except subprocess.CalledProcessError as e:
-                    print(f"{cmd_name}: process exited with status {e.returncode}")
-                except Exception as e:
-                    print(f"{cmd_name}: failed to execute: {e}")
+                    exit_code = int(args[0]) if args else 0
+                    sys.exit(exit_code)
+                except ValueError:
+                    print("exit: invalid argument")
+                    continue
+            elif cmd_name == "echo":
+                print(" ".join(args))
+            elif cmd_name == "type":
+                if args:
+                    target_cmd = args[0]
+                    if target_cmd in builtins:
+                        print(f"{target_cmd} is a shell builtin")
+                    else:
+                        exe_path = find_executable(target_cmd)
+                        if exe_path:
+                            print(f"{target_cmd} is {exe_path}")
+                        else:
+                            print(f"{target_cmd}: not found")
+                else:
+                    print("type: missing argument")
+            elif cmd_name == "pwd":
+                print(os.getcwd())
+            elif cmd_name == "cd":
+                if len(args) != 1:
+                    print("cd: too many arguments")
+                else:
+                    path = args[0]
+                    if path == "~":
+                        home = os.getenv("HOME")
+                        if home is None:
+                            print("cd: HOME environment variable not set")
+                            continue
+                        path = home
+                    try:
+                        os.chdir(path)
+                    except FileNotFoundError:
+                        print(f"cd: {args[0]}: No such file or directory")
+                    except NotADirectoryError:
+                        print(f"cd: {args[0]}: Not a directory")
+                    except PermissionError:
+                        print(f"cd: {args[0]}: Permission denied")
             else:
-                print(f"{cmd_name}: command not found")
+                exe_path = find_executable(cmd_name)
+                if exe_path:
+                    try:
+                        subprocess.run([cmd_name] + args, check=True)
+                    except subprocess.CalledProcessError as e:
+                        print(f"{cmd_name}: process exited with status {e.returncode}")
+                    except Exception as e:
+                        print(f"{cmd_name}: failed to execute: {e}")
+                else:
+                    print(f"{cmd_name}: command not found")
 
 if __name__ == "__main__":
     main()
