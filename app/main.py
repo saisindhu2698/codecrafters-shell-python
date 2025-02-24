@@ -23,9 +23,13 @@ def completer(text, state):
             except FileNotFoundError:
                 continue  # In case a directory in PATH doesn't exist
     
-    # If we have a match, return the match with a space appended at the end
+    # If we have a match, return the match with a space appended at the end for executables only
     if matches:
-        return matches[state] + " " if state < len(matches) else None
+        # Check if the match is an executable (external command)
+        if any(match not in builtin for match in matches):
+            return matches[state] + " " if state < len(matches) else None
+        else:
+            return matches[state] if state < len(matches) else None
     return None
 
 def main():
