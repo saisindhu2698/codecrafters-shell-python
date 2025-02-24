@@ -11,44 +11,15 @@ def find_executable(command):
             return exe_path
     return None
 
-def mysplit(input):
-    res = ['']
-    current_quote = ''
-    i = 0
-
-    while i < len(input):
-        c = input[i]
-        if c == '\\':
-            ch = input[i+1]
-            if current_quote == "'":
-                res[-1] += c
-            elif current_quote == '"':
-                if ch in ['\\', '$', '"', '\n']:
-                    res[-1] += ch
-                else:
-                    res[-1] += '\\' + ch
-                i += 1
-            else:
-                res[-1] += input[i+1]
-                i += 1
-        elif c in ['"',"'"]:
-            if current_quote == '':
-                current_quote = c
-            elif current_quote == c:
-                current_quote = ''
-            else:
-                res[-1] += c
-        elif c == ' ' and current_quote == '':
-            if res[-1] != '':
-                res.append('')
-        else:
-            res[-1] += c
-        i += 1
-        
-    if res[-1] == '':
-        res.pop()
-
-    return res
+def redirect_output(command, file_path):
+    """ Redirects the output of a command to the specified file. """
+    with open(file_path, "w") as f:
+        try:
+            subprocess.run(command, check=True, stdout=f)
+        except subprocess.CalledProcessError as e:
+            print(f"{command[0]}: process exited with status {e.returncode}")
+        except Exception as e:
+            print(f"{command[0]}: failed to execute: {e}")
 
 def main():
     builtins = {"echo", "exit", "type", "pwd", "cd"}
@@ -64,33 +35,30 @@ def main():
         if not command:
             continue
         
-        # Split the command properly using mysplit function
-        inp = mysplit(command)
-        
-        # Check if there is output redirection using > or 1>
-        to_redirect = None
-        if '1>' in inp:
-            idx = inp.index('1>')
-            inp, to_redirect = inp[:idx], inp[idx+1]
-        elif '>' in inp:
-            idx = inp.index('>')
-            inp, to_redirect = inp[:idx], inp[idx+1]
+        # Use shlex.split to handle quoting (including double quotes) correctly
+        if '>' in command:
+            parts = command.split('>')  # Split around the redirection operator
+            cmd_part = parts[0].strip()  # The command part
+            file_part = parts[1].strip()  # The file to redirect to
+            
+            # Handle the command and args before the redirection
+            cmd_parts = shlex.split(cmd_part)
+            cmd_name = cmd_parts[0]
+            args = cmd_parts[1:]
+            
+            # Check if the file is valid
+            if not file_part:
+                print("No file specified for output redirection.")
+                continue
 
-        # Parse the command using shlex to handle quotes and spaces
-        cmd_name = inp[0]
-        args = inp[1:]
-
-        # Handle output redirection
-        if to_redirect:
-            try:
-                with open(to_redirect, 'w') as f:
-                    subprocess.run([cmd_name] + args, stdout=f, check=True)
-            except FileNotFoundError:
-                print(f"{cmd_name}: {to_redirect}: No such file or directory")
-            except Exception as e:
-                print(f"{cmd_name}: failed to execute: {e}")
+            # Redirect output to the file
+            redirect_output([cmd_name] + args, file_part)
+            
         else:
-            # Handle normal command execution without redirection
+            parts = shlex.split(command)
+            cmd_name = parts[0]
+            args = parts[1:]
+            
             if cmd_name == "exit":
                 try:
                     exit_code = int(args[0]) if args else 0
@@ -99,7 +67,6 @@ def main():
                     print("exit: invalid argument")
                     continue
             elif cmd_name == "echo":
-                # Echo command should print exactly what is in the arguments
                 print(" ".join(args))
             elif cmd_name == "type":
                 if args:
@@ -121,6 +88,7 @@ def main():
                     print("cd: too many arguments")
                 else:
                     path = args[0]
+                    # Handle the ~ character for the user's home directory.
                     if path == "~":
                         home = os.getenv("HOME")
                         if home is None:
