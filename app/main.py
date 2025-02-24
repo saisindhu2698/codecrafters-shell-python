@@ -1,81 +1,136 @@
 import os
 import sys
-import readline
-from typing import Optional
+import shlex
+import subprocess
+import pathlib
+from typing import Final, TextIO, Mapping
 
-# Dictionary to track the number of times Tab is pressed for a specific prefix
-tab_press_count = {}
+# Constants
+SHELL_BUILTINS: Final[list[str]] = [
+    "echo",
+    "exit",
+    "type",
+    "pwd",
+    "cd",
+]
 
-def display_matches(substitution: str, matches: list[str], longest_match_length: int):
-    try:
-        if len(matches) > 1:
-            # When there are multiple matches, print them on a new line
-            sys.stdout.write("\n")
-            sys.stdout.write("  ".join(sorted(matches)) + "\n")
-        sys.stdout.write(f"$ {substitution}")  # After displaying matches, show the prompt
-        sys.stdout.flush()
-        readline.redisplay()  # Redraw the prompt
-    except Exception as e:
-        sys.stderr.write(f"Error displaying matches: {e}\n")
+def parse_programs_in_path(path: str, programs: dict[str, pathlib.Path]) -> None:
+    """Creates a mapping of programs in path to their paths"""
+    for p, _, bins in pathlib.Path(path).walk():
+        for b in bins:
+            programs[b] = p / b
 
-def complete(text: str, state: int) -> Optional[str]:
-    global tab_press_count
+def generate_program_paths() -> Mapping[str, pathlib.Path]:
+    programs: dict[str, pathlib.Path] = {}
+    for p in (os.getenv("PATH") or "").split(":"):
+        parse_programs_in_path(p, programs)
+    return programs
 
-    if text not in tab_press_count:
-        tab_press_count[text] = 0  # Initialize the tab press count for this prefix
-    
-    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
-    matches = []
+PROGRAMS_IN_PATH: Final[Mapping[str, pathlib.Path]] = {**generate_program_paths()}
+COMPLETIONS: Final[list[str]] = [*SHELL_BUILTINS, *PROGRAMS_IN_PATH.keys()]
 
-    # Find all executables that match the prefix
-    for directory in path_dirs:
-        try:
-            for filename in os.listdir(directory):
-                if filename.startswith(text) and os.access(os.path.join(directory, filename), os.X_OK):
-                    matches.append(filename)
-        except FileNotFoundError:
-            continue
+def display_matches(substitution, matches, longest_match_length):
+    print()
+    if matches:
+        print("  ".join(matches))
+    print("$ " + substitution, end="")
 
-    matches = sorted(set(matches))  # Remove duplicates and sort
+def complete(text: str, state: int) -> str | None:
+    matches = list(set([s for s in COMPLETIONS if s.startswith(text)]))
+    if len(matches) == 1:
+        return matches[state] + " " if state < len(matches) else None
+    return matches[state] if state < len(matches) else None
 
-    # Handle tab press logic
-    if len(matches) > 1:  # More than one match found
-        if tab_press_count[text] == 0:
-            tab_press_count[text] += 1
-            sys.stdout.write("\a")  # Ring the bell character
-            sys.stdout.write(f"$ {text}")  # Display the current text (prefix) without repeating the prompt
-            sys.stdout.flush()
-            return None  # Wait for the second Tab press to show completions
-        elif tab_press_count[text] == 1:
-            # On second Tab press, display the matches and the prompt
-            display_matches(text, matches, len(matches[0]))  # Display the matches
-            tab_press_count[text] = 0  # Reset tab press count for this prefix
-            return None
-    return None
+# Set up readline for autocompletion
+readline.set_completion_display_matches_hook(display_matches)
+readline.parse_and_bind("tab: complete")
+readline.set_completer(complete)
 
-def setup_readline():
-    """Setup readline for autocompletion and tab press handling."""
-    readline.set_completer(complete)  # Set the completer function
-    readline.set_completion_display_matches_hook(display_matches)  # Hook for displaying matches
-    readline.parse_and_bind("tab: complete")  # Bind the Tab key for completion
-    readline.parse_and_bind("set bell-style audible")  # Enable audible bell on Tab press
-    readline.set_auto_history(True)  # Enable automatic history
-
-# Main function to simulate a basic shell
 def main():
-    setup_readline()
-    
     while True:
         sys.stdout.write("$ ")
-        sys.stdout.flush()
-        command_line = input().strip()
+        cmds = shlex.split(input())
+        out = sys.stdout
+        err = sys.stderr
+        close_out = False
+        close_err = False
+        try:
+            # Handle output redirection (standard and error)
+            if ">" in cmds:
+                out_index = cmds.index(">")
+                out = open(cmds[out_index + 1], "w")
+                close_out = True
+                cmds = cmds[:out_index] + cmds[out_index + 2 :]
+            elif "1>" in cmds:
+                out_index = cmds.index("1>")
+                out = open(cmds[out_index + 1], "w")
+                close_out = True
+                cmds = cmds[:out_index] + cmds[out_index + 2 :]
+            if "2>" in cmds:
+                out_index = cmds.index("2>")
+                err = open(cmds[out_index + 1], "w")
+                close_err = True
+                cmds = cmds[:out_index] + cmds[out_index + 2 :]
+            if ">>" in cmds:
+                out_index = cmds.index(">>")
+                out = open(cmds[out_index + 1], "a")
+                close_out = True
+                cmds = cmds[:out_index] + cmds[out_index + 2 :]
+            elif "1>>" in cmds:
+                out_index = cmds.index("1>>")
+                out = open(cmds[out_index + 1], "a")
+                close_out = True
+                cmds = cmds[:out_index] + cmds[out_index + 2 :]
+            if "2>>" in cmds:
+                out_index = cmds.index("2>>")
+                err = open(cmds[out_index + 1], "a")
+                close_err = True
+                cmds = cmds[:out_index] + cmds[out_index + 2 :]
+            # Handle the command execution
+            handle_all(cmds, out, err)
+        finally:
+            if close_out:
+                out.close()
+            if close_err:
+                err.close()
 
-        if command_line == "exit":
-            break
-        elif command_line:
-            # Handle the command execution here (external or internal commands)
-            pass
+def handle_all(cmds: list[str], out: TextIO, err: TextIO):
+    # Match commands and execute corresponding actions
+    match cmds:
+        case ["echo", *s]:
+            out.write(" ".join(s) + "\n")
+        case ["type", s]:
+            type_command(s, out, err)
+        case ["exit", "0"]:
+            sys.exit(0)
+        case ["pwd"]:
+            out.write(f"{os.getcwd()}\n")
+        case ["cd", dir]:
+            cd(dir, out, err)
+        case [cmd, *args] if cmd in PROGRAMS_IN_PATH:
+            process = subprocess.Popen([cmd, *args], stdout=out, stderr=err)
+            process.wait()
+        case command:
+            out.write(f"{' '.join(command)}: command not found\n")
 
-# Run the shell program
+def type_command(command: str, out: TextIO, err: TextIO):
+    if command in SHELL_BUILTINS:
+        out.write(f"{command} is a shell builtin\n")
+        return
+    if command in PROGRAMS_IN_PATH:
+        out.write(f"{command} is {PROGRAMS_IN_PATH[command]}\n")
+        return
+    out.write(f"{command}: not found\n")
+
+def cd(path: str, out: TextIO, err: TextIO) -> None:
+    if path.startswith("~"):
+        home = os.getenv("HOME") or "/root"
+        path = path.replace("~", home)
+    p = pathlib.Path(path)
+    if not p.exists():
+        out.write(f"cd: {path}: No such file or directory\n")
+        return
+    os.chdir(p)
+
 if __name__ == "__main__":
     main()
