@@ -12,14 +12,18 @@ def find_executable(command):
     return None
 
 def redirect_output(command, file_path):
-    """ Redirects the output of a command to the specified file, avoiding unnecessary output like '1'. """
+    """Redirects output to a file while ensuring only the intended output is written."""
     with open(file_path, "w") as f:
         try:
-            subprocess.run(command, check=True, stdout=f, stderr=subprocess.PIPE)
+            # Run the command and capture stdout to the file.
+            result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Only write stdout to the file (avoid stderr and other unwanted content).
+            f.write(result.stdout.decode())
         except subprocess.CalledProcessError as e:
             print(f"{command[0]}: process exited with status {e.returncode}")
         except Exception as e:
             print(f"{command[0]}: failed to execute: {e}")
+
 
 def main():
     builtins = {"echo", "exit", "type", "pwd", "cd"}
