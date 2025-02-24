@@ -3,6 +3,7 @@ import sys
 import shlex
 import pathlib
 import readline
+import subprocess  # Add this import to handle external commands
 from typing import Final, TextIO, Mapping
 
 # Constants
