@@ -1,123 +1,114 @@
 import sys
 import os
 import subprocess
-import shlex
 
-def find_executable(command):
-    paths = os.getenv("PATH", "").split(":")
-    for path in paths:
-        exe_path = os.path.join(path, command)
-        if os.path.isfile(exe_path) and os.access(exe_path, os.X_OK):
-            return exe_path
+def mysplit(input):
+    res = ['']
+    current_quote = ''
+    i = 0
+    while i < len(input):
+        c = input[i]
+        if c == '\\':
+            ch = input[i+1]
+            if current_quote == "'":
+                res[-1] += c
+            elif current_quote == '"':
+                ch = input[i+1]
+                if ch in ['\\', '$', '"', '\n']:
+                    res[-1] += ch
+                else:
+                    res[-1] += '\\' + ch
+                i += 1
+            else:
+                res[-1] += input[i+1]
+                i += 1
+        elif c in ['"', "'"]:
+            if current_quote == '':
+                current_quote = c
+            elif current_quote == c:
+                current_quote = ''
+            else:
+                res[-1] += c
+        elif c == ' ' and current_quote == '':
+            if res[-1] != '':
+                res.append('')
+        else:
+            res[-1] += c
+        i += 1
+        
+    if res[-1] == '':
+        res.pop()
+    
+    return res
+
+def get_user_command():
+    sys.stdout.write("$ ")
+    out, err = sys.stdout, sys.stderr
+    inp = mysplit(input())
+
+    # Check for redirection (either 1> or >)
+    if '1>' in inp or '>' in inp:
+        idx = inp.index('1>') if '1>' in inp else inp.index('>')
+        inp, out = inp[:idx], inp[idx+1]
+
+    return inp, out, err
+
+def get_file(dirs, filename):
+    for dir in dirs:
+        filepath = f'{dir}/{filename}'
+        if os.path.isfile(filepath):
+            return filepath
     return None
 
-def redirect_output(command, file_path):
-    """Redirects output to a file while ensuring only the intended output is written."""
-    with open(file_path, "w") as f:
-        try:
-            # Run the command and capture stdout to the file.
-            result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            # Only write stdout to the file (avoid stderr and other unwanted content).
-            f.write(result.stdout.decode())
-        except subprocess.CalledProcessError as e:
-            print(f"{command[0]}: process exited with status {e.returncode}")
-        except Exception as e:
-            print(f"{command[0]}: failed to execute: {e}")
+def handle_command(inp, dirs, HOME, out, err):
+    toCloseOut = False
+    if type(out) is str:
+        toCloseOut = True
+        out = open(out, 'w+')
 
+    match inp:
+        case ['exit', '0']:
+            sys.exit(0)
 
-def main():
-    builtins = {"echo", "exit", "type", "pwd", "cd"}
-    
-    while True:
-        sys.stdout.write("$ ")
-        sys.stdout.flush()
-        try:
-            command = input().strip()
-        except EOFError:
-            break
-        
-        if not command:
-            continue
-        
-        # Use shlex.split to handle quoting (including double quotes) correctly
-        if '>' in command:
-            parts = command.split('>')  # Split around the redirection operator
-            cmd_part = parts[0].strip()  # The command part
-            file_part = parts[1].strip()  # The file to redirect to
-            
-            # Handle the command and args before the redirection
-            cmd_parts = shlex.split(cmd_part)
-            cmd_name = cmd_parts[0]
-            args = cmd_parts[1:]
-            
-            # Check if the file is valid
-            if not file_part:
-                print("No file specified for output redirection.")
-                continue
+        case ['echo', *args]:
+            out.write(' '.join(args) + '\n')
 
-            # Redirect output to the file
-            redirect_output([cmd_name] + args, file_part)
-            
-        else:
-            parts = shlex.split(command)
-            cmd_name = parts[0]
-            args = parts[1:]
-            
-            if cmd_name == "exit":
-                try:
-                    exit_code = int(args[0]) if args else 0
-                    sys.exit(exit_code)
-                except ValueError:
-                    print("exit: invalid argument")
-                    continue
-            elif cmd_name == "echo":
-                print(" ".join(args))
-            elif cmd_name == "type":
-                if args:
-                    target_cmd = args[0]
-                    if target_cmd in builtins:
-                        print(f"{target_cmd} is a shell builtin")
-                    else:
-                        exe_path = find_executable(target_cmd)
-                        if exe_path:
-                            print(f"{target_cmd} is {exe_path}")
-                        else:
-                            print(f"{target_cmd}: not found")
-                else:
-                    print("type: missing argument")
-            elif cmd_name == "pwd":
-                print(os.getcwd())
-            elif cmd_name == "cd":
-                if len(args) != 1:
-                    print("cd: too many arguments")
-                else:
-                    path = args[0]
-                    # Handle the ~ character for the user's home directory.
-                    if path == "~":
-                        home = os.getenv("HOME")
-                        if home is None:
-                            print("cd: HOME environment variable not set")
-                            continue
-                        path = home
-                    try:
-                        os.chdir(path)
-                    except FileNotFoundError:
-                        print(f"cd: {args[0]}: No such file or directory")
-                    except NotADirectoryError:
-                        print(f"cd: {args[0]}: Not a directory")
-                    except PermissionError:
-                        print(f"cd: {args[0]}: Permission denied")
+        case ['type', arg]:
+            if arg in ['type', 'exit', 'echo', 'pwd', 'cd']:
+                out.write(f'{arg} is a shell builtin\n')
+            elif (filepath := get_file(dirs, arg)):
+                out.write(f'{arg} is {filepath}\n')
             else:
-                exe_path = find_executable(cmd_name)
-                if exe_path:
-                    try:
-                        subprocess.run([cmd_name] + args, check=True)
-                    except subprocess.CalledProcessError as e:
-                        print(f"{cmd_name}: process exited with status {e.returncode}")
-                    except Exception as e:
-                        print(f"{cmd_name}: failed to execute: {e}")
-                else:
-                    print(f"{cmd_name}: command not found")
+                out.write(f'{arg}: not found\n')
+
+        case ['pwd']:
+            out.write(f'{os.getcwd()}\n')
+        
+        case ['cd', '~']:
+            os.chdir(HOME)
+
+        case ['cd', path]:
+            if os.path.isdir(path):
+                os.chdir(path)
+            else:
+                err.write(f'cd: {path}: No such file or directory\n')
+       
+        case [file, *args]:
+            if (filepath := get_file(dirs, file)):
+                subprocess.run([filepath, *args], stdout=out, stderr=err)
+            else:
+                err.write(f'{" ".join(inp)}: command not found\n')
+
+    if toCloseOut:
+        out.close()
+
+def main(dirs, HOME):
+    while True:
+        inp, out, err = get_user_command()
+        handle_command(inp, dirs, HOME, out, err)
 
 if __name__ == "__main__":
-    main()
+    PATH = os.environ.get("PATH")
+    dirs = PATH.split(':')
+    HOME = os.environ.get("HOME")
+    main(dirs, HOME)
