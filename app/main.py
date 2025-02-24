@@ -32,9 +32,7 @@ def print_program_name():
 def main():
     builtins = {"echo", "exit", "type", "pwd", "cd"}
     
-    # Print the program name on startup
-    print_program_name()
-
+    # Only print the program name after the prompt appears
     while True:
         sys.stdout.write("$ ")
         sys.stdout.flush()
@@ -45,6 +43,9 @@ def main():
         
         if not command:
             continue
+
+        # Print the program name after the prompt
+        print_program_name()
         
         # Check if redirection is present and handle 1> or >
         if '>' in command or '1>' in command:
