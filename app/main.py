@@ -65,6 +65,7 @@ def main():
                     continue
             elif cmd_name == "echo":
                 # Echo command should print exactly what is in the arguments
+                # Here, ensure `1>` is not included in the output
                 print(" ".join(args))
             elif cmd_name == "type":
                 if args:
