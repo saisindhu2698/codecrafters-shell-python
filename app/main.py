@@ -1,15 +1,19 @@
 import sys
 
-
 def main():
-    # Uncomment this block to pass the first stage
     sys.stdout.write("$ ")
-
-    # Wait for user input
+    sys.stdout.flush()
+    
     command = input()
-    if command == "exit 0":
-        sys.exit(0)
-    print(f"{command}: command not found")
+    
+    if command.startswith("echo "):
+        # Print the text following "echo " directly
+        sys.stdout.write(command[5:] + "\n")
+    elif command == "":
+        pass
+    else:
+        sys.stdout.write(f"{command}: command not found\n")
+    
     main()
 
 if __name__ == "__main__":
