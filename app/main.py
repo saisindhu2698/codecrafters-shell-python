@@ -36,8 +36,8 @@ def completer(text, state):
             return None  # Do not return any match yet (waiting for second Tab)
         elif tab_press_count[text] == 1:
             # Show the matching executables on the second Tab press
-            sys.stdout.write("\n" + "  ".join(sorted(matches)) + "\n")
-            sys.stdout.write("$ ")
+            sys.stdout.write("\n" + "  ".join(sorted(matches)) + "\n")  # Print completions
+            sys.stdout.write("$ ")  # Print prompt after completions
             sys.stdout.flush()
             tab_press_count[text] = 0  # Reset the tab press count for the next command
             return None  # Do not return any match yet
