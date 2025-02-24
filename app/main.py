@@ -1,7 +1,6 @@
 import os
 import sys
 import shlex
-import subprocess
 import pathlib
 import readline
 from typing import Final, TextIO, Mapping
@@ -50,6 +49,8 @@ readline.parse_and_bind("tab: complete")
 readline.set_completer(complete)
 
 def main():
+    current_dir = os.getcwd()  # Track the current directory for `cd`
+    
     while True:
         sys.stdout.write("$ ")
         cmds = shlex.split(input())
@@ -87,14 +88,19 @@ def main():
                         break
                     elif cmds[0] == "cd":
                         if len(cmds) > 1:
+                            target_dir = cmds[1]
+                            if target_dir == "~":
+                                target_dir = os.path.expanduser("~")  # Expand ~ to home directory
                             try:
-                                os.chdir(cmds[1])
+                                os.chdir(target_dir)
+                                current_dir = os.getcwd()
                             except FileNotFoundError:
-                                err.write(f"{cmds[1]}: No such file or directory\n")
+                                err.write(f"{target_dir}: No such file or directory\n")
                         else:
                             os.chdir(os.path.expanduser("~"))
+                            current_dir = os.getcwd()
                     elif cmds[0] == "pwd":
-                        out.write(f"{os.getcwd()}\n")
+                        out.write(f"{current_dir}\n")
                     elif cmds[0] == "type":
                         if len(cmds) > 1:
                             out.write(f"{cmds[1]} is a shell built-in command.\n")
