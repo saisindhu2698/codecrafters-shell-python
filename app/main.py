@@ -12,10 +12,10 @@ def find_executable(command):
     return None
 
 def redirect_output(command, file_path):
-    """ Redirects the output of a command to the specified file. """
+    """ Redirects the output of a command to the specified file, avoiding unnecessary output like '1'. """
     with open(file_path, "w") as f:
         try:
-            subprocess.run(command, check=True, stdout=f)
+            subprocess.run(command, check=True, stdout=f, stderr=subprocess.PIPE)
         except subprocess.CalledProcessError as e:
             print(f"{command[0]}: process exited with status {e.returncode}")
         except Exception as e:
