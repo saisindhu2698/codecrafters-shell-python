@@ -11,7 +11,7 @@ def find_executable(command):
     return None
 
 def main():
-    builtins = {"echo", "exit", "type", "pwd"}
+    builtins = {"echo", "exit", "type", "pwd", "cd"}
     
     while True:
         sys.stdout.write("$ ")
@@ -51,13 +51,29 @@ def main():
             else:
                 print("type: missing argument")
         elif cmd_name == "pwd":
-            # Print the current working directory
-            print(os.getcwd()) 
+            print(os.getcwd())
+        elif cmd_name == "cd":
+            if len(args) != 1:
+                print("cd: too many arguments")
+            else:
+                path = args[0]
+                # Only handling absolute paths in this stage
+                if not os.path.isabs(path):
+                    print(f"cd: {path}: No such file or directory")
+                else:
+                    try:
+                        os.chdir(path)
+                    except FileNotFoundError:
+                        print(f"cd: {path}: No such file or directory")
+                    except NotADirectoryError:
+                        print(f"cd: {path}: Not a directory")
+                    except PermissionError:
+                        print(f"cd: {path}: Permission denied")
         else:
             exe_path = find_executable(cmd_name)
             if exe_path:
                 try:
-                    subprocess.run([cmd_name] + args, check=True)  # Pass cmd_name instead of exe_path
+                    subprocess.run([cmd_name] + args, check=True)
                 except subprocess.CalledProcessError as e:
                     print(f"{cmd_name}: process exited with status {e.returncode}")
                 except Exception as e:
