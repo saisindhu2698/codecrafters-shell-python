@@ -15,13 +15,13 @@ def completer(text, state):
 
     # Check for matching executables in PATH
     path_dirs = os.environ.get("PATH", "").split(os.pathsep)
-    matches = []
+    matches = set()  # Use a set to avoid duplicates
     
     for directory in path_dirs:
         try:
             for filename in os.listdir(directory):
                 if filename.startswith(text) and os.access(os.path.join(directory, filename), os.X_OK):
-                    matches.append(filename)
+                    matches.add(filename)  # Add to set to ensure uniqueness
         except FileNotFoundError:
             continue  # In case a directory in PATH doesn't exist
     
@@ -34,7 +34,7 @@ def completer(text, state):
             return None  # Do not return any match yet (waiting for second Tab)
         elif tab_press_count[text] == 1:
             # Show the matching executables on the second Tab press
-            sys.stdout.write("\n" + "  ".join(matches) + "\n$ ")
+            sys.stdout.write("\n" + "  ".join(sorted(matches)) + "\n$ ")
             sys.stdout.flush()
             tab_press_count[text] = 0  # Reset the tab press count for the next command
             return None  # Do not return any match yet
