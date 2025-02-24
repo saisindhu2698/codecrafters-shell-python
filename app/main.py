@@ -56,6 +56,7 @@ def main():
             exe_path = find_executable(cmd_name)
             if exe_path:
                 try:
+                    print(f"Arg #0 (program name): {os.path.basename(exe_path)}")
                     subprocess.run([exe_path] + args, check=True)
                 except subprocess.CalledProcessError as e:
                     print(f"{cmd_name}: process exited with status {e.returncode}")
