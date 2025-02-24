@@ -57,14 +57,21 @@ def main():
                 print("cd: too many arguments")
             else:
                 path = args[0]
+                # Handle the ~ character for the user's home directory.
+                if path == "~":
+                    home = os.getenv("HOME")
+                    if home is None:
+                        print("cd: HOME environment variable not set")
+                        continue
+                    path = home
                 try:
                     os.chdir(path)
                 except FileNotFoundError:
-                    print(f"cd: {path}: No such file or directory")
+                    print(f"cd: {args[0]}: No such file or directory")
                 except NotADirectoryError:
-                    print(f"cd: {path}: Not a directory")
+                    print(f"cd: {args[0]}: Not a directory")
                 except PermissionError:
-                    print(f"cd: {path}: Permission denied")
+                    print(f"cd: {args[0]}: Permission denied")
         else:
             exe_path = find_executable(cmd_name)
             if exe_path:
