@@ -11,7 +11,7 @@ def find_executable(command):
     return None
 
 def main():
-    builtins = {"echo", "exit", "type"}
+    builtins = {"echo", "exit", "type", "pwd"}
     
     while True:
         sys.stdout.write("$ ")
@@ -50,11 +50,13 @@ def main():
                         print(f"{target_cmd}: not found")
             else:
                 print("type: missing argument")
+        elif cmd_name == "pwd":
+            print(os.getcwd())
         else:
             exe_path = find_executable(cmd_name)
             if exe_path:
                 try:
-                    subprocess.run([cmd_name] + args, check=True)  # Pass cmd_name instead of exe_path
+                    subprocess.run([exe_path] + args, check=True)
                 except subprocess.CalledProcessError as e:
                     print(f"{cmd_name}: process exited with status {e.returncode}")
                 except Exception as e:
