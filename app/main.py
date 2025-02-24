@@ -64,6 +64,7 @@ def main():
                     print("exit: invalid argument")
                     continue
             elif cmd_name == "echo":
+                # Echo command should print exactly what is in the arguments
                 print(" ".join(args))
             elif cmd_name == "type":
                 if args:
