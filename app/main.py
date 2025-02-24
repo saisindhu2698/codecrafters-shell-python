@@ -104,9 +104,9 @@ def main():
                 if exe_path:
                     try:
                         subprocess.run([cmd_name] + args, check=True)
-                    except subprocess.CalledProcessError as e:
-                        # Ensure we don't print error messages that interfere with the prompt
-                        pass  # Command failed silently, just print prompt next
+                    except subprocess.CalledProcessError:
+                        # Suppress error messages on failure
+                        pass  # Command failed silently, just print the prompt next
                     except Exception as e:
                         print(f"{cmd_name}: failed to execute: {e}")
                 else:
