@@ -23,8 +23,10 @@ def completer(text, state):
             except FileNotFoundError:
                 continue  # In case a directory in PATH doesn't exist
     
-    # Return the match for the current state (for tab completion)
-    return matches[state] if state < len(matches) else None
+    # If we have a match, return the match with a space appended at the end
+    if matches:
+        return matches[state] + " " if state < len(matches) else None
+    return None
 
 def main():
     builtin = ["echo", "exit", "type", "pwd", "cd"]
@@ -109,7 +111,9 @@ def main():
                     sys.stderr.write(result.stderr)
                     sys.stderr.flush()
                 continue
-            args = shlex.split(command_line)  # Properly split command while handling quotes
+            args = shlex.split(
+                command_line
+            )  # Properly split command while handling quotes
             command = args[0]
             # Handle "exit"
             if command == "exit":
