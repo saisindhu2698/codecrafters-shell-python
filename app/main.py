@@ -4,6 +4,12 @@ import subprocess
 import shlex
 
 def find_executable(command):
+    """Handles finding executables that may have spaces or quotes in their names."""
+    # First check if the command is quoted (i.e., it contains spaces, quotes, or backslashes)
+    if '"' in command or "'" in command:
+        # Handle quoted executables, remove the quotes
+        command = shlex.split(command)[0]
+    
     paths = os.getenv("PATH", "").split(":")
     for path in paths:
         exe_path = os.path.join(path, command)
@@ -29,6 +35,64 @@ def print_program_name():
     program_name = os.path.basename(sys.argv[0])
     print(f"Arg #0 (program name): {program_name}")
 
+def parse_input(command):
+    """Handles the parsing of commands with proper escaping and quoting."""
+    result = []
+    i = 0
+    length = len(command)
+    in_single_quote = False
+    in_double_quote = False
+    escape = False
+    current = ""
+    
+    while i < length:
+        char = command[i]
+
+        # Handle escape character
+        if escape:
+            if in_double_quote:
+                # In double quotes, the escape only applies to \, $, ", and newline
+                if char in ['\\', '$', '"', '\n']:
+                    current += char
+                else:
+                    current += '\\' + char
+            else:
+                current += char
+            escape = False
+            i += 1
+            continue
+        elif char == '\\':
+            escape = True
+        elif char == "'":
+            if in_single_quote:
+                result.append(current)
+                current = ""
+                in_single_quote = False
+            else:
+                if current:
+                    result.append(current)
+                    current = ""
+                in_single_quote = True
+        elif char == '"':
+            if in_double_quote:
+                result.append(current)
+                current = ""
+                in_double_quote = False
+            else:
+                if current:
+                    result.append(current)
+                    current = ""
+                in_double_quote = True
+        else:
+            current += char
+        
+        i += 1
+    
+    if current:
+        result.append(current)
+
+    return result
+
 def main():
     builtins = {"echo", "exit", "type", "pwd", "cd"}
     
@@ -46,9 +110,12 @@ def main():
         if not command:
             continue
         
-        # Use shlex.split to handle quoting (including double quotes) correctly
-        if '>' in command:
-            parts = command.split('>')  # Split around the redirection operator
+        # Parse the input command with support for backslash quoting and single quotes
+        parsed_command = parse_input(command)
+        
+        # Handling redirection and file output
+        if '>' in parsed_command:
+            parts = ' '.join(parsed_command).split('>')  # Split around the redirection operator
             cmd_part = parts[0].strip()  # The command part
             file_part = parts[1].strip()  # The file to redirect to
             
@@ -66,9 +133,8 @@ def main():
             redirect_output([cmd_name] + args, file_part)
             
         else:
-            parts = shlex.split(command)
-            cmd_name = parts[0]
-            args = parts[1:]
+            cmd_name = parsed_command[0]
+            args = parsed_command[1:]
             
             if cmd_name == "exit":
                 try:
