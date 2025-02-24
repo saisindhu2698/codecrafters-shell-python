@@ -1,4 +1,13 @@
 import sys
+import os
+
+def find_executable(command):
+    paths = os.getenv("PATH", "").split(":")
+    for path in paths:
+        exe_path = os.path.join(path, command)
+        if os.path.isfile(exe_path) and os.access(exe_path, os.X_OK):
+            return exe_path
+    return None
 
 def main():
     builtins = {"echo", "exit", "type"}
@@ -22,7 +31,11 @@ def main():
             if cmd_name in builtins:
                 print(f"{cmd_name} is a shell builtin")
             else:
-                print(f"{cmd_name}: not found")
+                exe_path = find_executable(cmd_name)
+                if exe_path:
+                    print(f"{cmd_name} is {exe_path}")
+                else:
+                    print(f"{cmd_name}: not found")
         else:
             print(f"{command}: command not found")
 
