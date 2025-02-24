@@ -31,6 +31,8 @@ def completer(text, state):
             tab_press_count[text] += 1
             sys.stdout.write('\a')  # Ring the bell on first Tab press
             sys.stdout.flush()
+            sys.stdout.write(f"$ {text}")  # Show the current text again after the first Tab press
+            sys.stdout.flush()
             return None  # Do not return any match yet (waiting for second Tab)
         elif tab_press_count[text] == 1:
             # Show the matching executables on the second Tab press
