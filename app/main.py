@@ -57,18 +57,14 @@ def main():
                 print("cd: too many arguments")
             else:
                 path = args[0]
-                # Only handling absolute paths in this stage
-                if not os.path.isabs(path):
+                try:
+                    os.chdir(path)
+                except FileNotFoundError:
                     print(f"cd: {path}: No such file or directory")
-                else:
-                    try:
-                        os.chdir(path)
-                    except FileNotFoundError:
-                        print(f"cd: {path}: No such file or directory")
-                    except NotADirectoryError:
-                        print(f"cd: {path}: Not a directory")
-                    except PermissionError:
-                        print(f"cd: {path}: Permission denied")
+                except NotADirectoryError:
+                    print(f"cd: {path}: Not a directory")
+                except PermissionError:
+                    print(f"cd: {path}: Permission denied")
         else:
             exe_path = find_executable(cmd_name)
             if exe_path:
