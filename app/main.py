@@ -4,6 +4,9 @@ import subprocess
 import shlex
 import readline  # Import readline for autocompletion
 
+# Define the builtins globally
+builtins = {"echo", "exit", "type", "pwd", "cd"}
+
 def find_executable(command):
     paths = os.getenv("PATH", "").split(":")
     for path in paths:
@@ -14,7 +17,6 @@ def find_executable(command):
 
 # Function to handle the autocompletion
 def complete_builtin_commands(text, state):
-    builtins = ["echo", "exit", "type", "pwd", "cd"]
     matches = [cmd for cmd in builtins if cmd.startswith(text)]
     if state < len(matches):
         return matches[state] + " "  # Add a space after the completed command
