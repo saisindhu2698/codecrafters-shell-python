@@ -42,9 +42,37 @@ def completer(text, state):
             return None  # Do not return any match yet
     return None
 
+def find_executable(command):
+    paths = os.getenv("PATH", "").split(":")
+    for path in paths:
+        exe_path = os.path.join(path, command)
+        if os.path.isfile(exe_path) and os.access(exe_path, os.X_OK):
+            return exe_path
+    return None
+
+def redirect_output(command, file_path):
+    """Redirects output to a file while ensuring only the intended output is written."""
+    with open(file_path, "w") as f:
+        try:
+            # Run the command and capture stdout to the file.
+            result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Only write stdout to the file (avoid stderr and other unwanted content).
+            f.write(result.stdout.decode())
+        except subprocess.CalledProcessError as e:
+            print(f"{command[0]}: process exited with status {e.returncode}")
+        except Exception as e:
+            print(f"{command[0]}: failed to execute: {e}")
+
+def print_program_name():
+    """Prints the program name (excluding the full path)."""
+    program_name = os.path.basename(sys.argv[0])
+    print(f"Arg #0 (program name): {program_name}")
+
 def main():
     """Main function to run the shell with autocompletion."""
     global tab_press_count
+    builtins = {"echo", "exit", "type", "pwd", "cd"}
+    
     # Initialize readline for autocompletion
     readline.set_completer(completer)
     readline.parse_and_bind("tab: complete")
@@ -58,67 +86,88 @@ def main():
             if not command_line:
                 continue
 
-            args = shlex.split(command_line)  # Properly split command while handling quotes
-            command = args[0]
-            
-            # Handle "exit"
-            if command == "exit":
-                sys.exit(0)
-            
-            # Handle other built-in commands like echo, pwd, cd, etc.
-            elif command == "echo":
-                sys.stdout.write(" ".join(args[1:]) + "\n")
-                sys.stdout.flush()
-            
-            elif command == "pwd":
-                sys.stdout.write(os.getcwd() + "\n")
-                sys.stdout.flush()
-            
-            elif command == "cd":
-                try:
-                    os.chdir(args[1] if len(args) > 1 else os.environ.get("HOME"))
-                except FileNotFoundError:
-                    sys.stderr.write(f"cd: {args[1]}: No such file or directory\n")
-                sys.stdout.flush()
-            
-            elif command == "type":
-                if len(args) < 2:
-                    sys.stderr.write("type: missing argument\n")
-                else:
-                    new_command = args[1]
-                    cmd_path = None
-                    # Search for the command in PATH
-                    for path in os.environ.get("PATH", "").split(os.pathsep):
-                        full_path = os.path.join(path, new_command)
-                        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
-                            cmd_path = full_path
-                            break
-                    if new_command in ["echo", "pwd", "cd"]:
-                        sys.stdout.write(f"{new_command} is a shell builtin\n")
-                    elif cmd_path:
-                        sys.stdout.write(f"{new_command} is {cmd_path}\n")
-                    else:
-                        sys.stderr.write(f"{new_command}: not found\n")
-                sys.stdout.flush()
+            # Print the program name after the prompt
+            print_program_name()
 
-            # External command execution
+            # Check if redirection is present and handle 1> or >
+            if '>' in command_line or '1>' in command_line:
+                parts = command_line.split('>')  # Split around the redirection operator
+                cmd_part = parts[0].strip()  # The command part
+                file_part = parts[1].strip()  # The file to redirect to
+                
+                # Handle the command and args before the redirection
+                cmd_parts = shlex.split(cmd_part)
+                cmd_name = cmd_parts[0]
+                args = cmd_parts[1:]
+                
+                # Check if the file is valid
+                if not file_part:
+                    print("No file specified for output redirection.")
+                    continue
+
+                # Redirect output to the file
+                redirect_output([cmd_name] + args, file_part)
+                
             else:
-                cmd_path = None
-                for path in os.environ.get("PATH", "").split(os.pathsep):
-                    full_path = os.path.join(path, command)
-                    if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
-                        cmd_path = full_path
-                        break
-                if cmd_path:
+                parts = shlex.split(command_line)
+                cmd_name = parts[0]
+                args = parts[1:]
+                
+                if cmd_name == "exit":
                     try:
-                        result = subprocess.run(args, capture_output=True, text=True)
-                        sys.stdout.write(result.stdout)
-                        sys.stderr.write(result.stderr)
-                    except Exception as e:
-                        sys.stderr.write(f"Error executing command: {e}\n")
+                        exit_code = int(args[0]) if args else 0
+                        sys.exit(exit_code)
+                    except ValueError:
+                        print("exit: invalid argument")
+                        continue
+                elif cmd_name == "echo":
+                    print(" ".join(args))
+                elif cmd_name == "type":
+                    if args:
+                        target_cmd = args[0]
+                        if target_cmd in builtins:
+                            print(f"{target_cmd} is a shell builtin")
+                        else:
+                            exe_path = find_executable(target_cmd)
+                            if exe_path:
+                                print(f"{target_cmd} is {exe_path}")
+                            else:
+                                print(f"{target_cmd}: not found")
+                    else:
+                        print("type: missing argument")
+                elif cmd_name == "pwd":
+                    print(os.getcwd())
+                elif cmd_name == "cd":
+                    if len(args) != 1:
+                        print("cd: too many arguments")
+                    else:
+                        path = args[0]
+                        # Handle the ~ character for the user's home directory.
+                        if path == "~":
+                            home = os.getenv("HOME")
+                            if home is None:
+                                print("cd: HOME environment variable not set")
+                                continue
+                            path = home
+                        try:
+                            os.chdir(path)
+                        except FileNotFoundError:
+                            print(f"cd: {args[0]}: No such file or directory")
+                        except NotADirectoryError:
+                            print(f"cd: {args[0]}: Not a directory")
+                        except PermissionError:
+                            print(f"cd: {args[0]}: Permission denied")
                 else:
-                    sys.stderr.write(f"{command}: command not found\n")
-                sys.stdout.flush()
+                    exe_path = find_executable(cmd_name)
+                    if exe_path:
+                        try:
+                            subprocess.run([cmd_name] + args, check=True)
+                        except subprocess.CalledProcessError as e:
+                            print(f"{cmd_name}: process exited with status {e.returncode}")
+                        except Exception as e:
+                            print(f"{cmd_name}: failed to execute: {e}")
+                    else:
+                        print(f"{cmd_name}: command not found")
         
         except EOFError:  # Handle Ctrl+D gracefully
             sys.stdout.write("\n")
