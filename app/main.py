@@ -1,5 +1,6 @@
 import sys
 import os
+import subprocess
 
 def find_executable(command):
     paths = os.getenv("PATH", "").split(":")
@@ -15,29 +16,51 @@ def main():
     while True:
         sys.stdout.write("$ ")
         sys.stdout.flush()
-        command = input().strip()
+        try:
+            command = input().strip()
+        except EOFError:
+            break
         
-        if command.startswith("exit "):
+        if not command:
+            continue
+        
+        parts = command.split()
+        cmd_name = parts[0]
+        args = parts[1:]
+        
+        if cmd_name == "exit":
             try:
-                exit_code = int(command.split()[1])
+                exit_code = int(args[0]) if args else 0
                 sys.exit(exit_code)
-            except (IndexError, ValueError):
+            except ValueError:
                 print("exit: invalid argument")
                 continue
-        elif command.startswith("echo "):
-            print(command[5:])
-        elif command.startswith("type "):
-            cmd_name = command.split()[1]
-            if cmd_name in builtins:
-                print(f"{cmd_name} is a shell builtin")
-            else:
-                exe_path = find_executable(cmd_name)
-                if exe_path:
-                    print(f"{cmd_name} is {exe_path}")
+        elif cmd_name == "echo":
+            print(" ".join(args))
+        elif cmd_name == "type":
+            if args:
+                target_cmd = args[0]
+                if target_cmd in builtins:
+                    print(f"{target_cmd} is a shell builtin")
                 else:
-                    print(f"{cmd_name}: not found")
+                    exe_path = find_executable(target_cmd)
+                    if exe_path:
+                        print(f"{target_cmd} is {exe_path}")
+                    else:
+                        print(f"{target_cmd}: not found")
+            else:
+                print("type: missing argument")
         else:
-            print(f"{command}: command not found")
+            exe_path = find_executable(cmd_name)
+            if exe_path:
+                try:
+                    subprocess.run([exe_path] + args, check=True)
+                except subprocess.CalledProcessError as e:
+                    print(f"{cmd_name}: process exited with status {e.returncode}")
+                except Exception as e:
+                    print(f"{cmd_name}: failed to execute: {e}")
+            else:
+                print(f"{cmd_name}: command not found")
 
 if __name__ == "__main__":
     main()
