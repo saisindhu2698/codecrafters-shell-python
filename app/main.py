@@ -1,131 +1,81 @@
 import os
-import readline
-import subprocess
 import sys
-import shlex
+import readline
+from typing import Optional
 
-# Variable to keep track of tab press count for a specific prefix
+# Dictionary to track the number of times Tab is pressed for a specific prefix
 tab_press_count = {}
 
-def completer(text, state):
-    """Autocomplete function for executables and built-in commands."""
-    global tab_press_count
-    if text not in tab_press_count:
-        tab_press_count[text] = 0
+def display_matches(substitution: str, matches: list[str], longest_match_length: int):
+    try:
+        if len(matches) > 1:
+            # When there are multiple matches, print them on a new line
+            sys.stdout.write("\n")
+            sys.stdout.write("  ".join(sorted(matches)) + "\n")
+        sys.stdout.write(f"$ {substitution}")  # After displaying matches, show the prompt
+        sys.stdout.flush()
+        readline.redisplay()  # Redraw the prompt
+    except Exception as e:
+        sys.stderr.write(f"Error displaying matches: {e}\n")
 
-    # Check for matching executables in PATH
-    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
-    matches = set()  # Use a set to avoid duplicates
+def complete(text: str, state: int) -> Optional[str]:
+    global tab_press_count
+
+    if text not in tab_press_count:
+        tab_press_count[text] = 0  # Initialize the tab press count for this prefix
     
+    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+    matches = []
+
+    # Find all executables that match the prefix
     for directory in path_dirs:
         try:
             for filename in os.listdir(directory):
                 if filename.startswith(text) and os.access(os.path.join(directory, filename), os.X_OK):
-                    matches.add(filename)  # Add to set to ensure uniqueness
+                    matches.append(filename)
         except FileNotFoundError:
-            continue  # In case a directory in PATH doesn't exist
-    
-    if matches:
-        # Handle Tab key presses
+            continue
+
+    matches = sorted(set(matches))  # Remove duplicates and sort
+
+    # Handle tab press logic
+    if len(matches) > 1:  # More than one match found
         if tab_press_count[text] == 0:
             tab_press_count[text] += 1
-            sys.stdout.write('\a')  # Ring the bell on first Tab press
-            sys.stdout.write(f"$ {text}")  # Show the current text (prefix) without repeating prompt
+            sys.stdout.write("\a")  # Ring the bell character
+            sys.stdout.write(f"$ {text}")  # Display the current text (prefix) without repeating the prompt
             sys.stdout.flush()
-            return None  # Do not return any match yet (waiting for second Tab)
+            return None  # Wait for the second Tab press to show completions
         elif tab_press_count[text] == 1:
-            # Show the matching executables on the second Tab press
-            sys.stdout.write("\n" + "  ".join(sorted(matches)) + "\n")  # Print completions
-            sys.stdout.write("$ ")  # Print prompt after completions, only once
-            sys.stdout.flush()
-            tab_press_count[text] = 0  # Reset the tab press count for the next command
-            return None  # Do not return any match yet
+            # On second Tab press, display the matches and the prompt
+            display_matches(text, matches, len(matches[0]))  # Display the matches
+            tab_press_count[text] = 0  # Reset tab press count for this prefix
+            return None
     return None
 
+def setup_readline():
+    """Setup readline for autocompletion and tab press handling."""
+    readline.set_completer(complete)  # Set the completer function
+    readline.set_completion_display_matches_hook(display_matches)  # Hook for displaying matches
+    readline.parse_and_bind("tab: complete")  # Bind the Tab key for completion
+    readline.parse_and_bind("set bell-style audible")  # Enable audible bell on Tab press
+    readline.set_auto_history(True)  # Enable automatic history
+
+# Main function to simulate a basic shell
 def main():
-    """Main function to run the shell with autocompletion."""
-    global tab_press_count
-    # Initialize readline for autocompletion
-    readline.set_completer(completer)
-    readline.parse_and_bind("tab: complete")
+    setup_readline()
     
     while True:
         sys.stdout.write("$ ")
         sys.stdout.flush()
-        try:
-            # Read input and parse using shlex
-            command_line = input().strip()
-            if not command_line:
-                continue
+        command_line = input().strip()
 
-            args = shlex.split(command_line)  # Properly split command while handling quotes
-            command = args[0]
-            
-            # Handle "exit"
-            if command == "exit":
-                sys.exit(0)
-            
-            # Handle other built-in commands like echo, pwd, cd, etc.
-            elif command == "echo":
-                sys.stdout.write(" ".join(args[1:]) + "\n")
-                sys.stdout.flush()
-            
-            elif command == "pwd":
-                sys.stdout.write(os.getcwd() + "\n")
-                sys.stdout.flush()
-            
-            elif command == "cd":
-                try:
-                    os.chdir(args[1] if len(args) > 1 else os.environ.get("HOME"))
-                except FileNotFoundError:
-                    sys.stderr.write(f"cd: {args[1]}: No such file or directory\n")
-                sys.stdout.flush()
-            
-            elif command == "type":
-                if len(args) < 2:
-                    sys.stderr.write("type: missing argument\n")
-                else:
-                    new_command = args[1]
-                    cmd_path = None
-                    # Search for the command in PATH
-                    for path in os.environ.get("PATH", "").split(os.pathsep):
-                        full_path = os.path.join(path, new_command)
-                        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
-                            cmd_path = full_path
-                            break
-                    if new_command in ["echo", "pwd", "cd"]:
-                        sys.stdout.write(f"{new_command} is a shell builtin\n")
-                    elif cmd_path:
-                        sys.stdout.write(f"{new_command} is {cmd_path}\n")
-                    else:
-                        sys.stderr.write(f"{new_command}: not found\n")
-                sys.stdout.flush()
-
-            # External command execution
-            else:
-                cmd_path = None
-                for path in os.environ.get("PATH", "").split(os.pathsep):
-                    full_path = os.path.join(path, command)
-                    if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
-                        cmd_path = full_path
-                        break
-                if cmd_path:
-                    try:
-                        result = subprocess.run(args, capture_output=True, text=True)
-                        sys.stdout.write(result.stdout)
-                        sys.stderr.write(result.stderr)
-                    except Exception as e:
-                        sys.stderr.write(f"Error executing command: {e}\n")
-                else:
-                    sys.stderr.write(f"{command}: command not found\n")
-                sys.stdout.flush()
-        
-        except EOFError:  # Handle Ctrl+D gracefully
-            sys.stdout.write("\n")
+        if command_line == "exit":
             break
-        except Exception as e:
-            sys.stderr.write(f"Error: {e}\n")
-            sys.stdout.flush()
+        elif command_line:
+            # Handle the command execution here (external or internal commands)
+            pass
 
+# Run the shell program
 if __name__ == "__main__":
     main()
