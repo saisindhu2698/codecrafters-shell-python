@@ -1,5 +1,4 @@
 import sys
-import os
 import subprocess
 
 def shell_prompt():
@@ -13,7 +12,7 @@ def shell_prompt():
         # If the user types 'exit', exit the shell
         if command == "exit":
             break
-
+        
         # Process the command (This part executes the command)
         execute_command(command)
 
@@ -35,10 +34,18 @@ def execute_command(command):
 
     # Handle regular commands
     try:
+        # Run the command and capture stdout and stderr separately
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        print(result.stdout, end="")  # Print the output to the shell
+        
+        # Strip any additional newlines or unwanted output from the result before printing
+        output = result.stdout.strip()
+        
+        # Print only the standard output without any extra characters
+        print(output, end="")
+        
     except subprocess.CalledProcessError as e:
-        print(e.stderr, end="")  # Print errors if any
+        # Handle errors by printing stderr output
+        print(e.stderr, end="")
 
 if __name__ == "__main__":
     shell_prompt()
