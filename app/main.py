@@ -1,25 +1,22 @@
 import sys
 
 def main():
-    # Print the shell prompt
-    sys.stdout.write("$ ")
-
-    # Wait for user input
-    command = input().strip()
-
-    # Split the command into parts
-    parts = command.split()
-
-    # Check if the command is "echo"
-    if parts and parts[0] == "echo":
-        # Print everything after "echo"
-        print(" ".join(parts[1:]))
-    else:
-        # Print error for invalid commands (or handle other builtins)
-        print(f"{command}: command not found")
-    
-    # Continue the loop
-    main()
+    while True:
+        sys.stdout.write("$ ")
+        sys.stdout.flush()
+        command = input().strip()
+        
+        if command.startswith("exit "):
+            try:
+                exit_code = int(command.split()[1])
+                sys.exit(exit_code)
+            except (IndexError, ValueError):
+                print("exit: invalid argument")
+                continue
+        elif command.startswith("echo "):
+            print(command[5:])
+        else:
+            print(f"{command}: command not found")
 
 if __name__ == "__main__":
     main()
