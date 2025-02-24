@@ -30,14 +30,13 @@ def completer(text, state):
         if tab_press_count[text] == 0:
             tab_press_count[text] += 1
             sys.stdout.write('\a')  # Ring the bell on first Tab press
-            sys.stdout.flush()
             sys.stdout.write(f"$ {text}")  # Show the current text (prefix) without repeating prompt
             sys.stdout.flush()
             return None  # Do not return any match yet (waiting for second Tab)
         elif tab_press_count[text] == 1:
             # Show the matching executables on the second Tab press
             sys.stdout.write("\n" + "  ".join(sorted(matches)) + "\n")  # Print completions
-            sys.stdout.write("$ ")  # Print prompt after completions
+            sys.stdout.write("$ ")  # Print prompt after completions, only once
             sys.stdout.flush()
             tab_press_count[text] = 0  # Reset the tab press count for the next command
             return None  # Do not return any match yet
