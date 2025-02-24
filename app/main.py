@@ -1,6 +1,7 @@
 import sys
 import os
 import subprocess
+import shlex
 
 def find_executable(command):
     paths = os.getenv("PATH", "").split(":")
@@ -24,7 +25,8 @@ def main():
         if not command:
             continue
         
-        parts = command.split()
+        # Use shlex.split to handle quoting, including single quotes
+        parts = shlex.split(command)
         cmd_name = parts[0]
         args = parts[1:]
         
