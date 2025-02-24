@@ -51,13 +51,13 @@ def main():
             else:
                 print("type: missing argument")
         elif cmd_name == "pwd":
-            print(os.getcwd())
+            # Print the current working directory
+            print(os.getcwd()) 
         else:
             exe_path = find_executable(cmd_name)
             if exe_path:
                 try:
-                    print(f"Arg #0 (program name): {os.path.basename(exe_path)}")
-                    subprocess.run([exe_path] + args, check=True)
+                    subprocess.run([cmd_name] + args, check=True)  # Pass cmd_name instead of exe_path
                 except subprocess.CalledProcessError as e:
                     print(f"{cmd_name}: process exited with status {e.returncode}")
                 except Exception as e:
