@@ -1,104 +1,190 @@
 import sys
 import os
-import subprocess
+import readline
 import shlex
-import readline  # Import readline for autocompletion
+import subprocess
 
-# Define the builtins globally
-builtins = {"echo", "exit", "type", "pwd", "cd"}
+def completer(text, state):
+    """Autocomplete function for built-in commands and external executables in PATH."""
+    builtin = ["echo ", "exit ", "type ", "pwd ", "cd "]
+    matches = []
 
-def find_executable(command):
-    paths = os.getenv("PATH", "").split(":")
-    for path in paths:
-        exe_path = os.path.join(path, command)
-        if os.path.isfile(exe_path) and os.access(exe_path, os.X_OK):
-            return exe_path
-    return None
+    # First check for built-in commands
+    matches.extend([cmd for cmd in builtin if cmd.startswith(text)])
 
-# Function to handle the autocompletion
-def complete_builtin_commands(text, state):
-    matches = [cmd for cmd in builtins if cmd.startswith(text)]
-    if state < len(matches):
-        return matches[state] + " "  # Add a space after the completed command
-    else:
-        return None
+    # Then check for external executable commands in PATH
+    if not matches:
+        path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+        for directory in path_dirs:
+            try:
+                for filename in os.listdir(directory):
+                    if filename.startswith(text) and os.access(os.path.join(directory, filename), os.X_OK):
+                        matches.append(filename)
+            except FileNotFoundError:
+                continue  # In case a directory in PATH doesn't exist
+    
+    # Return the match for the current state (for tab completion)
+    return matches[state] if state < len(matches) else None
 
 def main():
-    # Bind tab key to use our custom completion function
-    readline.set_completer(complete_builtin_commands)
-    readline.parse_and_bind("tab: complete")  # Allow tab to trigger completion
-
+    builtin = ["echo", "exit", "type", "pwd", "cd"]
+    PATH = os.environ.get("PATH")
+    HOME = os.environ.get("HOME")  # Get the user's home directory
+    # Set up autocomplete
+    readline.set_completer(completer)
+    readline.parse_and_bind("tab: complete")
+    
     while True:
+        # Prompt for input
         sys.stdout.write("$ ")
         sys.stdout.flush()
         try:
-            command = input().strip()
-        except EOFError:
-            break
-        
-        if not command:
-            continue
-        
-        # Use shlex.split to handle quoting (including double quotes) correctly
-        parts = shlex.split(command)
-        cmd_name = parts[0]
-        args = parts[1:]
-        
-        if cmd_name == "exit":
-            try:
-                exit_code = int(args[0]) if args else 0
-                sys.exit(exit_code)
-            except ValueError:
-                print("exit: invalid argument")
+            # Read input and parse using shlex
+            command_line = input().strip()
+            if not command_line:
                 continue
-        elif cmd_name == "echo":
-            print(" ".join(args))
-        elif cmd_name == "type":
-            if args:
-                target_cmd = args[0]
-                if target_cmd in builtins:
-                    print(f"{target_cmd} is a shell builtin")
+            # Handle stderr redirection (2>>)
+            if "2>>" in command_line:
+                parts = shlex.split(command_line)
+                split_index = parts.index("2>>")
+                command_args = parts[:split_index]
+                error_file = parts[split_index + 1]
+                with open(error_file, "a") as f:
+                    result = subprocess.run(
+                        command_args, stdout=subprocess.PIPE, stderr=f, text=True
+                    )
+                # Write any stdout output to the shell
+                if result.stdout:
+                    sys.stdout.write(result.stdout)
+                    sys.stdout.flush()
+                continue
+            # Handle stdout redirection (>>) or (1>>)
+            if ">>" in command_line or "1>>" in command_line:
+                parts = shlex.split(command_line)
+                if ">>" in parts:
+                    split_index = parts.index(">>")
                 else:
-                    exe_path = find_executable(target_cmd)
-                    if exe_path:
-                        print(f"{target_cmd} is {exe_path}")
-                    else:
-                        print(f"{target_cmd}: not found")
-            else:
-                print("type: missing argument")
-        elif cmd_name == "pwd":
-            print(os.getcwd())
-        elif cmd_name == "cd":
-            if len(args) != 1:
-                print("cd: too many arguments")
-            else:
-                path = args[0]
-                # Handle the ~ character for the user's home directory.
-                if path == "~":
-                    home = os.getenv("HOME")
-                    if home is None:
-                        print("cd: HOME environment variable not set")
-                        continue
-                    path = home
+                    split_index = parts.index("1>>")
+                command_args = parts[:split_index]
+                output_file = parts[split_index + 1]
+                with open(output_file, "a") as f:
+                    result = subprocess.run(
+                        command_args, stdout=f, stderr=subprocess.PIPE, text=True
+                    )
+                # Write any stderr output to the shell
+                if result.stderr:
+                    sys.stderr.write(result.stderr)
+                    sys.stderr.flush()
+                continue
+            # Handle stderr redirection (2>)
+            if "2>" in command_line:
+                parts = shlex.split(command_line)
+                split_index = parts.index("2>")
+                command_args = parts[:split_index]
+                error_file = parts[split_index + 1]
+                with open(error_file, "w") as f:
+                    result = subprocess.run(
+                        command_args, stdout=subprocess.PIPE, stderr=f, text=True
+                    )
+                # Write any stdout output to the shell
+                if result.stdout:
+                    sys.stdout.write(result.stdout)
+                    sys.stdout.flush()
+                continue
+            # Handle stdout redirection (>) or (1>)
+            if ">" in command_line or "1>" in command_line:
+                parts = shlex.split(command_line)
+                if ">" in parts:
+                    split_index = parts.index(">")
+                else:
+                    split_index = parts.index("1>")
+                command_args = parts[:split_index]
+                output_file = parts[split_index + 1]
+                with open(output_file, "w") as f:
+                    result = subprocess.run(
+                        command_args, stdout=f, stderr=subprocess.PIPE, text=True
+                    )
+                # Write any stderr output to the shell
+                if result.stderr:
+                    sys.stderr.write(result.stderr)
+                    sys.stderr.flush()
+                continue
+            args = shlex.split(command_line)  # Properly split command while handling quotes
+            command = args[0]
+            # Handle "exit"
+            if command == "exit":
+                sys.exit(0)
+            # Handle "echo"
+            elif command == "echo":
+                output = " ".join(args[1:])
+                sys.stdout.write(output + "\n")
+                sys.stdout.flush()
+            # Handle "pwd"
+            elif command == "pwd":
+                sys.stdout.write(os.getcwd() + "\n")
+                sys.stdout.flush()
+            # Handle "cd"
+            elif command == "cd":
+                # Default to HOME if no argument is provided
+                directory = args[1] if len(args) > 1 else HOME
+                # Handle ~ for home directory
+                if directory == "~":
+                    directory = HOME
                 try:
-                    os.chdir(path)
+                    os.chdir(directory)
                 except FileNotFoundError:
-                    print(f"cd: {args[0]}: No such file or directory")
-                except NotADirectoryError:
-                    print(f"cd: {args[0]}: Not a directory")
+                    sys.stderr.write(f"cd: {directory}: No such file or directory\n")
                 except PermissionError:
-                    print(f"cd: {args[0]}: Permission denied")
-        else:
-            exe_path = find_executable(cmd_name)
-            if exe_path:
-                try:
-                    subprocess.run([cmd_name] + args, check=True)
-                except subprocess.CalledProcessError as e:
-                    print(f"{cmd_name}: process exited with status {e.returncode}")
+                    sys.stderr.write(f"cd: {directory}: Permission denied\n")
                 except Exception as e:
-                    print(f"{cmd_name}: failed to execute: {e}")
+                    sys.stderr.write(f"cd: {directory}: {str(e)}\n")
+                sys.stdout.flush()
+            # Handle "type"
+            elif command == "type":
+                if len(args) < 2:
+                    sys.stderr.write("type: missing argument\n")
+                else:
+                    new_command = args[1]
+                    cmd_path = None
+                    # Search for the command in PATH
+                    for path in PATH.split(os.pathsep):
+                        full_path = os.path.join(path, new_command)
+                        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
+                            cmd_path = full_path
+                            break
+                    if new_command in builtin:
+                        sys.stdout.write(f"{new_command} is a shell builtin\n")
+                    elif cmd_path:
+                        sys.stdout.write(f"{new_command} is {cmd_path}\n")
+                    else:
+                        sys.stderr.write(f"{new_command}: not found\n")
+                sys.stdout.flush()
+            # Handle external commands
             else:
-                print(f"{cmd_name}: command not found")
+                cmd_path = None
+                # Search for the command in PATH
+                for path in PATH.split(os.pathsep):
+                    full_path = os.path.join(path, command)
+                    if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
+                        cmd_path = full_path
+                        break
+                if cmd_path:
+                    try:
+                        # Run the command with arguments
+                        result = subprocess.run(args, capture_output=True, text=True)
+                        sys.stdout.write(result.stdout)
+                        sys.stderr.write(result.stderr)
+                    except Exception as e:
+                        sys.stderr.write(f"Error executing command: {e}\n")
+                else:
+                    sys.stderr.write(f"{command}: command not found\n")
+                sys.stdout.flush()
+        except EOFError:  # Handle Ctrl+D gracefully
+            sys.stdout.write("\n")
+            break
+        except Exception as e:
+            sys.stderr.write(f"Error: {e}\n")
+            sys.stdout.flush()
 
 if __name__ == "__main__":
     main()
