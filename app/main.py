@@ -19,13 +19,16 @@ def main():
                 continue
             
             args = shlex.split(command_line)
-            if '>' in args:
+            if '>' in args or '1>' in args:
                 redir_index = args.index('>') if '>' in args else args.index('1>')
-                output_file = args[redir_index + 1] if len(args) > redir_index + 1 else None
+                if len(args) <= redir_index + 1:
+                    sys.stderr.write("Error: No file specified for redirection\n")
+                    continue
+                output_file = args[redir_index + 1]
                 args = args[:redir_index]
             else:
                 output_file = None
-                
+            
             if not args:
                 continue
             
@@ -40,12 +43,16 @@ def main():
                     os.chdir(directory)
                 except FileNotFoundError:
                     sys.stderr.write(f"cd: {directory}: No such file or directory\n")
+                    continue
                 except PermissionError:
                     sys.stderr.write(f"cd: {directory}: Permission denied\n")
+                    continue
                 except Exception as e:
                     sys.stderr.write(f"cd: {directory}: {str(e)}\n")
-                sys.stdout.flush()
+                    continue
                 continue
+            elif command == "echo":
+                output = " ".join(args[1:]) + "\n"
             else:
                 cmd_path = None
                 for path in PATH.split(os.pathsep):
