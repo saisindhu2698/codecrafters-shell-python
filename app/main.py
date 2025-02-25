@@ -49,10 +49,12 @@ def completer(text, state):
                 return None
 
     elif len(matches) == 1:
-        return matches[state] if state < len(matches) else None
+        if state < len(matches):
+            return matches[state] + " "  # Add a space after single completion
+        else:
+            return None
 
     return None
-
 
 def main():
     global tab_pressed
