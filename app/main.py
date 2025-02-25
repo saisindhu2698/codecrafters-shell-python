@@ -55,12 +55,18 @@ def completer(text, state):
 
 
 def main():
-    global tab_pressed
-    readline.set_completer(completer)
-    readline.parse_and_bind("tab: complete")
+    # *** ISOLATION STEP 1: MINIMAL REPRODUCIBLE EXAMPLE ***
+    # Comment out everything except the following lines:
+    # sys.stdout.write("$ custom_exe_7734\n")
+    # sys.stdout.flush()
+    # return  # Exit immediately to isolate
+
+    #global tab_pressed
+    #readline.set_completer(completer)
+    #readline.parse_and_bind("tab: complete")
 
     while True:
-        sys.stdout.write("$ ")
+        sys.stdout.write("$ ") # *** ISOLATION STEP 3: CHECK PROMPT ***
         sys.stdout.flush()
         try:
             command_line = input().strip()
@@ -89,7 +95,7 @@ def main():
                     os.chdir(directory)
                 except Exception as e:
                     sys.stderr.write(f"cd: {directory}: {str(e)}\n")
-                    sys.stderr.flush() # Flush stderr!
+                    sys.stderr.flush()
                 sys.stdout.flush()
             elif command == "type":
                 if len(args) < 2:
@@ -114,14 +120,14 @@ def main():
                             sys.stderr.flush()
             else:
                 try:
-                    result = subprocess.run(args, capture_output=True, text=True, check=True) # check=True will raise exception for non-zero exit codes
+                    result = subprocess.run(args, capture_output=True, text=True, check=True)
                     sys.stdout.write(result.stdout)
                     sys.stderr.write(result.stderr)
                     sys.stdout.flush()
                     sys.stderr.flush()
                 except subprocess.CalledProcessError as e:
                     sys.stderr.write(f"Error: {e}\n")
-                    sys.stderr.write(e.stderr)  # Print the subprocess's stderr
+                    sys.stderr.write(e.stderr)
                     sys.stderr.flush()
                 except Exception as e:
                     sys.stderr.write(f"Error: {e}\n")
