@@ -43,7 +43,7 @@ def completer(text, state):
     
     return matches[state] + " " if state < len(matches) else None
 
-def execute_command(args, redirect_file=None, redirect_stderr=None):
+def execute_command(args, redirect_file=None, append_stdout=False, redirect_stderr=None):
     builtin = ["echo", "exit", "type", "pwd", "cd"]
     PATH = os.environ.get("PATH")
     HOME = os.environ.get("HOME")
@@ -51,8 +51,9 @@ def execute_command(args, redirect_file=None, redirect_stderr=None):
 
     # Prepare stdout redirection if needed.
     if redirect_file:
+        mode = "a" if append_stdout else "w"
         try:
-            f_stdout = open(redirect_file, "w")
+            f_stdout = open(redirect_file, mode)
         except Exception as e:
             sys.stderr.write(f"Error opening {redirect_file}: {e}\n")
             return
@@ -73,7 +74,7 @@ def execute_command(args, redirect_file=None, redirect_stderr=None):
     else:
         target_stderr = sys.stderr
 
-    # For builtins, if we need to redirect stderr, temporarily replace sys.stderr.
+    # For builtins, temporarily replace sys.stderr if needed.
     original_stderr = sys.stderr
     if redirect_stderr:
         sys.stderr = target_stderr
@@ -81,7 +82,6 @@ def execute_command(args, redirect_file=None, redirect_stderr=None):
     if command == "exit":
         sys.exit(0)
     elif command == "echo":
-        # echo writes to stdout only.
         target_stdout.write(" ".join(args[1:]) + "\n")
         target_stdout.flush()
     elif command == "pwd":
@@ -128,7 +128,7 @@ def execute_command(args, redirect_file=None, redirect_stderr=None):
                 break
         if cmd_path:
             try:
-                # For external commands, pass file handles to subprocess.run.
+                # When redirecting, pass file handles to subprocess.run.
                 if redirect_file or redirect_stderr:
                     result = subprocess.run(
                         args,
@@ -136,7 +136,6 @@ def execute_command(args, redirect_file=None, redirect_stderr=None):
                         stderr=(target_stderr if redirect_stderr else subprocess.PIPE),
                         text=True
                     )
-                    # If we didn't redirect stdout/stderr, then print captured output.
                     if not redirect_file:
                         sys.stdout.write(result.stdout)
                     if not redirect_stderr:
@@ -150,7 +149,6 @@ def execute_command(args, redirect_file=None, redirect_stderr=None):
         else:
             sys.stderr.write(f"{command}: command not found\n")
 
-    # Restore original stderr if it was replaced.
     if redirect_stderr:
         sys.stderr = original_stderr
 
@@ -177,25 +175,43 @@ def main():
 
             # Initialize redirection variables.
             redirect_stdout = None
+            append_stdout = False
             redirect_stderr = None
 
-            # Check for stderr redirection first (operator "2>")
+            # Check for stderr redirection (operator "2>")
             if "2>" in args:
                 idx = args.index("2>")
                 if idx + 1 >= len(args):
                     sys.stderr.write("Syntax error: expected filename after '2>'\n")
                     continue
                 redirect_stderr = args[idx + 1]
-                # Remove the operator and filename.
                 args = args[:idx] + args[idx+2:]
 
-            # Check for stdout redirection (operators ">" or "1>")
-            if ">" in args:
+            # Check for stdout appending redirection (operators ">>" or "1>>")
+            if ">>" in args:
+                idx = args.index(">>")
+                if idx + 1 >= len(args):
+                    sys.stderr.write("Syntax error: expected filename after '>>'\n")
+                    continue
+                redirect_stdout = args[idx + 1]
+                append_stdout = True
+                args = args[:idx]
+            elif "1>>" in args:
+                idx = args.index("1>>")
+                if idx + 1 >= len(args):
+                    sys.stderr.write("Syntax error: expected filename after '1>>'\n")
+                    continue
+                redirect_stdout = args[idx + 1]
+                append_stdout = True
+                args = args[:idx]
+            # If not appending, check for overwrite stdout redirection ("1>" or ">")
+            elif ">" in args:
                 idx = args.index(">")
                 if idx + 1 >= len(args):
                     sys.stderr.write("Syntax error: expected filename after '>'\n")
                     continue
                 redirect_stdout = args[idx + 1]
+                append_stdout = False
                 args = args[:idx]
             elif "1>" in args:
                 idx = args.index("1>")
@@ -203,13 +219,14 @@ def main():
                     sys.stderr.write("Syntax error: expected filename after '1>'\n")
                     continue
                 redirect_stdout = args[idx + 1]
+                append_stdout = False
                 args = args[:idx]
 
             if not args:
                 sys.stderr.write("Syntax error: no command specified\n")
                 continue
 
-            execute_command(args, redirect_file=redirect_stdout, redirect_stderr=redirect_stderr)
+            execute_command(args, redirect_file=redirect_stdout, append_stdout=append_stdout, redirect_stderr=redirect_stderr)
         except EOFError:
             sys.stdout.write("\n")
             break
