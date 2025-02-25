@@ -43,11 +43,90 @@ def completer(text, state):
     
     return matches[state] + " " if state < len(matches) else None
 
-def main():
+def execute_command(args, redirect_file=None):
     builtin = ["echo", "exit", "type", "pwd", "cd"]
     PATH = os.environ.get("PATH")
     HOME = os.environ.get("HOME")
+    command = args[0]
     
+    # If we need to redirect output, set up a temporary stdout replacement.
+    if redirect_file:
+        try:
+            f = open(redirect_file, "w")
+        except Exception as e:
+            sys.stderr.write(f"Error opening {redirect_file}: {e}\n")
+            return
+        target_stdout = f
+    else:
+        target_stdout = sys.stdout
+
+    if command == "exit":
+        sys.exit(0)
+    elif command == "echo":
+        target_stdout.write(" ".join(args[1:]) + "\n")
+        target_stdout.flush()
+    elif command == "pwd":
+        target_stdout.write(os.getcwd() + "\n")
+        target_stdout.flush()
+    elif command == "cd":
+        directory = args[1] if len(args) > 1 else HOME
+        if directory == "~":
+            directory = HOME
+        try:
+            os.chdir(directory)
+        except FileNotFoundError:
+            sys.stderr.write(f"cd: {directory}: No such file or directory\n")
+        except PermissionError:
+            sys.stderr.write(f"cd: {directory}: Permission denied\n")
+        except Exception as e:
+            sys.stderr.write(f"cd: {directory}: {str(e)}\n")
+        sys.stdout.flush()
+    elif command == "type":
+        if len(args) < 2:
+            sys.stderr.write("type: missing argument\n")
+        else:
+            new_command = args[1]
+            cmd_path = None
+            for path in PATH.split(os.pathsep):
+                full_path = os.path.join(path, new_command)
+                if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
+                    cmd_path = full_path
+                    break
+            if new_command in builtin:
+                target_stdout.write(f"{new_command} is a shell builtin\n")
+            elif cmd_path:
+                target_stdout.write(f"{new_command} is {cmd_path}\n")
+            else:
+                sys.stderr.write(f"{new_command}: not found\n")
+        target_stdout.flush()
+    else:
+        # External command: find in PATH
+        cmd_path = None
+        for path in PATH.split(os.pathsep):
+            full_path = os.path.join(path, command)
+            if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
+                cmd_path = full_path
+                break
+        if cmd_path:
+            try:
+                # If redirection is requested, use the file handle.
+                if redirect_file:
+                    result = subprocess.run(args, stdout=target_stdout, stderr=subprocess.PIPE, text=True)
+                    if result.stderr:
+                        sys.stderr.write(result.stderr)
+                else:
+                    result = subprocess.run(args, capture_output=True, text=True)
+                    sys.stdout.write(result.stdout)
+                    sys.stderr.write(result.stderr)
+            except Exception as e:
+                sys.stderr.write(f"Error executing command: {e}\n")
+        else:
+            sys.stderr.write(f"{command}: command not found\n")
+    if redirect_file:
+        f.close()
+    sys.stdout.flush()
+
+def main():
     readline.set_completer(completer)
     readline.parse_and_bind("tab: complete")
     
@@ -58,66 +137,25 @@ def main():
             command_line = input().strip()
             if not command_line:
                 continue
-            
+
+            # Use shlex to properly split the command line.
             args = shlex.split(command_line)
-            command = args[0]
             
-            if command == "exit":
-                sys.exit(0)
-            elif command == "echo":
-                sys.stdout.write(" ".join(args[1:]) + "\n")
-                sys.stdout.flush()
-            elif command == "pwd":
-                sys.stdout.write(os.getcwd() + "\n")
-                sys.stdout.flush()
-            elif command == "cd":
-                directory = args[1] if len(args) > 1 else HOME
-                if directory == "~":
-                    directory = HOME
-                try:
-                    os.chdir(directory)
-                except FileNotFoundError:
-                    sys.stderr.write(f"cd: {directory}: No such file or directory\n")
-                except PermissionError:
-                    sys.stderr.write(f"cd: {directory}: Permission denied\n")
-                except Exception as e:
-                    sys.stderr.write(f"cd: {directory}: {str(e)}\n")
-                sys.stdout.flush()
-            elif command == "type":
-                if len(args) < 2:
-                    sys.stderr.write("type: missing argument\n")
-                else:
-                    new_command = args[1]
-                    cmd_path = None
-                    for path in PATH.split(os.pathsep):
-                        full_path = os.path.join(path, new_command)
-                        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
-                            cmd_path = full_path
-                            break
-                    if new_command in builtin:
-                        sys.stdout.write(f"{new_command} is a shell builtin\n")
-                    elif cmd_path:
-                        sys.stdout.write(f"{new_command} is {cmd_path}\n")
-                    else:
-                        sys.stderr.write(f"{new_command}: not found\n")
-                sys.stdout.flush()
+            # Check for output redirection operator '>'
+            if ">" in args:
+                redirect_index = args.index(">")
+                if redirect_index + 1 >= len(args):
+                    sys.stderr.write("Syntax error: expected filename after '>'\n")
+                    continue
+                redirect_file = args[redirect_index + 1]
+                # Remove redirection operator and file from args.
+                args = args[:redirect_index]
+                if not args:
+                    sys.stderr.write("Syntax error: no command specified before redirection\n")
+                    continue
+                execute_command(args, redirect_file=redirect_file)
             else:
-                cmd_path = None
-                for path in PATH.split(os.pathsep):
-                    full_path = os.path.join(path, command)
-                    if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
-                        cmd_path = full_path
-                        break
-                if cmd_path:
-                    try:
-                        result = subprocess.run(args, capture_output=True, text=True)
-                        sys.stdout.write(result.stdout)
-                        sys.stderr.write(result.stderr)
-                    except Exception as e:
-                        sys.stderr.write(f"Error executing command: {e}\n")
-                else:
-                    sys.stderr.write(f"{command}: command not found\n")
-                sys.stdout.flush()
+                execute_command(args)
         except EOFError:
             sys.stdout.write("\n")
             break
