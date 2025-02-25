@@ -34,24 +34,24 @@ def completer(text, state):
                 tab_pressed = True
                 sys.stdout.write("\a")
                 sys.stdout.flush()
-                return None  # VERY IMPORTANT: Return None to signal more completions
-            else:  # Second tab press (show all completions)
+                return None
+            else:  # Second tab press
                 tab_pressed = False
-                output_string = "  ".join(matches)  # Two spaces here!
+                output_string = "  ".join(matches)  # Two spaces
                 sys.stdout.write("\n" + output_string + "\n$ " + text)
                 sys.stdout.flush()
-                return None  # VERY IMPORTANT: Return None after showing completions
-        else:  # Subsequent tab presses (try to complete)
-            tab_pressed = False  # Reset tab_pressed
+                return None
+        else:  # Subsequent tab presses
+            tab_pressed = False
             if state < len(matches):
-                return matches[state]  # Return the specific match for this state
+                return matches[state]
             else:
-                return None  # No more matches
+                return None
 
-    elif len(matches) == 1:  # Single match
+    elif len(matches) == 1:
         return matches[state] if state < len(matches) else None
 
-    return None  # No matches
+    return None
 
 
 def main():
@@ -70,12 +70,11 @@ def main():
             tab_pressed = False
 
             args = shlex.split(command_line)
-            if not args: #Handle empty command
+            if not args:
                 continue
+
             command = args[0]
 
-
-            # Handle built-in commands
             if command == "exit":
                 sys.exit(0)
             elif command == "echo":
@@ -90,37 +89,51 @@ def main():
                     os.chdir(directory)
                 except Exception as e:
                     sys.stderr.write(f"cd: {directory}: {str(e)}\n")
+                    sys.stderr.flush() # Flush stderr!
                 sys.stdout.flush()
             elif command == "type":
                 if len(args) < 2:
                     sys.stderr.write("type: missing argument\n")
+                    sys.stderr.flush()
                 else:
                     new_command = args[1]
                     if new_command in ["echo", "exit", "type", "pwd", "cd"]:
                         sys.stdout.write(f"{new_command} is a shell builtin\n")
+                        sys.stdout.flush()
                     else:
                         found = False
                         for path in os.environ.get("PATH", "").split(os.pathsep):
                             full_path = os.path.join(path, new_command)
                             if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
                                 sys.stdout.write(f"{new_command} is {full_path}\n")
+                                sys.stdout.flush()
                                 found = True
                                 break
                         if not found:
                             sys.stderr.write(f"{new_command}: not found\n")
-                sys.stdout.flush()
+                            sys.stderr.flush()
             else:
-                result = subprocess.run(args, capture_output=True, text=True)
-                sys.stdout.write(result.stdout)
-                sys.stderr.write(result.stderr)
-                sys.stdout.flush()
+                try:
+                    result = subprocess.run(args, capture_output=True, text=True, check=True) # check=True will raise exception for non-zero exit codes
+                    sys.stdout.write(result.stdout)
+                    sys.stderr.write(result.stderr)
+                    sys.stdout.flush()
+                    sys.stderr.flush()
+                except subprocess.CalledProcessError as e:
+                    sys.stderr.write(f"Error: {e}\n")
+                    sys.stderr.write(e.stderr)  # Print the subprocess's stderr
+                    sys.stderr.flush()
+                except Exception as e:
+                    sys.stderr.write(f"Error: {e}\n")
+                    sys.stderr.flush()
 
         except EOFError:
             sys.stdout.write("\n")
             break
         except Exception as e:
             sys.stderr.write(f"Error: {e}\n")
-            sys.stdout.flush()
+            sys.stderr.flush()
+
 
 if __name__ == "__main__":
     main()
