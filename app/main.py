@@ -32,12 +32,14 @@ def generate_program_paths() -> Mapping[str, pathlib.Path]:
 PROGRAMS_IN_PATH: Final[Mapping[str, pathlib.Path]] = {**generate_program_paths()}
 COMPLETIONS: Final[list[str]] = [*SHELL_BUILTINS, *PROGRAMS_IN_PATH.keys()]
 
-
 def display_matches(substitution, matches, longest_match_length):
     if matches:
         print()
-        print("  ".join(matches))
-    print("$ " + substitution, end="")
+        print("  ".join(matches), end="")  # Print matches on the same line
+        sys.stdout.flush() # Flush immediately after printing matches
+    print("\n$ " + substitution, end="") # Prompt on the next line
+    sys.stdout.flush() # Flush after printing the prompt
+    readline.redisplay() # Force readline to update the display
 
 
 def complete(text: str, state: int) -> str | None:
@@ -45,17 +47,16 @@ def complete(text: str, state: int) -> str | None:
     matches.sort()
 
     if len(matches) > 1:
-        if state == 0:
+        if state == 0:  # First tab press
             readline.set_completion_display_matches_hook(display_matches)
             return None
-        else:
+        else:  # Second tab press and subsequent
             return None
 
     elif len(matches) == 1:
         return matches[0] + " " if state == 0 else None
 
     return None
-
 
 readline.set_completer(complete)
 readline.parse_and_bind("tab: complete")
