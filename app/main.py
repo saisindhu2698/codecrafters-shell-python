@@ -4,48 +4,49 @@ import readline
 import shlex
 import subprocess
 
-# Global variable to track tab presses
-tab_pressed = False  
+tab_pressed = False
 
 def completer(text, state):
-    """Autocomplete function for built-in commands and external executables in PATH."""
     global tab_pressed
     builtin = ["echo ", "exit ", "type ", "pwd ", "cd "]
     matches = []
 
-    # Check for built-in commands
     matches.extend([cmd for cmd in builtin if cmd.startswith(text)])
 
-    # Check for external executable commands in PATH
     if not matches:
         path_dirs = os.environ.get("PATH", "").split(os.pathsep)
         for directory in path_dirs:
             try:
                 for filename in os.listdir(directory):
-                    if filename.startswith(text) and os.access(os.path.join(directory, filename), os.X_OK):
+                    full_path = os.path.join(directory, filename)  # Store full path
+                    if filename.startswith(text) and os.access(full_path, os.X_OK) and os.path.isfile(full_path): # Check if is file
                         matches.append(filename)
             except FileNotFoundError:
-                continue  # In case a directory in PATH doesn't exist
-    
-    # Sort matches alphabetically (important for test case)
-    matches.sort()
+                continue
 
-    # If multiple matches exist, handle double-tab behavior
+    matches.sort()  # Sort *after* collecting all matches
+
     if len(matches) > 1:
-        if state == 0:  
+        if state == 0:
             if not tab_pressed:
                 tab_pressed = True
-                sys.stdout.write("\a")  # Ring the bell on the first press
+                sys.stdout.write("\a")
                 sys.stdout.flush()
-                return None
+                return None  # Important: Return None to indicate more matches
             else:
                 tab_pressed = False
-                sys.stdout.write("\n" + "  ".join(matches) + "\n$ " + text)
+                # Join with spaces, then add newline and prompt
+                sys.stdout.write("\n" + " ".join(matches) + "\n$ " + text)
                 sys.stdout.flush()
                 return None
+        else: # state > 0
+            if state < len(matches):
+                return matches[state]
+            else:
+                return None
 
-    # Return a single match when only one is found
     return matches[state] if state < len(matches) else None
+
 
 def main():
     global tab_pressed
@@ -60,10 +61,13 @@ def main():
             if not command_line:
                 continue
 
-            tab_pressed = False  # Reset tab tracking after command execution
+            tab_pressed = False
 
             args = shlex.split(command_line)
+            if not args: #Handle empty command
+                continue
             command = args[0]
+
 
             # Handle built-in commands
             if command == "exit":
