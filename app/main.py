@@ -1,126 +1,139 @@
-# main.py
-import platform
 import sys
-from typing import Optional, TextIO
-from .command_factory import CommandFactory
-from .input_parser import InputParser, ParsedInput
-from .shell_context import ShellContext
-if platform.system == "Windows":
-    from pyreadline3 import Readline
-else:
-    import readline
-class Shell:
-    def __init__(self) -> None:
-        self._ctx = ShellContext()
-        self._factory = CommandFactory(self._ctx)
-        self._parser = InputParser()
-        if platform.system == "Windows":
-            self._readline = Readline()
-            self._readline.parse_and_bind("tab: complete")
-            self._readline.set_completer(self.complete)
+import os
+import readline
+import shlex
+import subprocess
+
+tab_pressed = False
+
+def completer(text, state):
+    global tab_pressed
+    builtin = ["echo ", "exit ", "type ", "pwd ", "cd "]
+    matches = []
+
+    matches.extend([cmd for cmd in builtin if cmd.startswith(text)])
+
+    if not matches:
+        path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+        seen = set()
+        for directory in path_dirs:
+            try:
+                for filename in os.listdir(directory):
+                    full_path = os.path.join(directory, filename)
+                    if filename.startswith(text) and os.access(full_path, os.X_OK) and os.path.isfile(full_path) and filename not in seen:
+                        matches.append(filename)
+                        seen.add(filename)
+            except FileNotFoundError:
+                continue
+
+    matches.sort()
+
+    if len(matches) > 1:
+        if state == 0:
+            if not tab_pressed:
+                tab_pressed = True
+                sys.stdout.write("\a")
+                sys.stdout.flush()
+                return None
+            else:
+                tab_pressed = False
+                output_string = "  ".join(matches)
+                sys.stdout.write("\n" + output_string.strip() + "\n$ " + text)  # Remove extra whitespace
+                sys.stdout.flush()
+                return None
         else:
-            readline.parse_and_bind("tab: complete")  # type: ignore
-            readline.set_completer(self.complete)  # type: ignore
-            readline.set_completion_display_matches_hook(self.display_matches)  # type: ignore  # noqa: F821
-            readline.parse_and_bind("set bell-style audible")  # type: ignore
-            readline.set_auto_history(True)  # type: ignore
-    def display_matches(
-        self, substitution: str, matches: list[str], longest_match_length: int
-    ):
-        try:
-            sys.stdout.write("\n")
-            sys.stdout.write(" ".join(matches) + "\n")
-            sys.stdout.write(f"$ {substitution}")
-            sys.stdout.flush()
-            readline.redisplay()  # type: ignore
-        except Exception as e:
-            sys.stderr.write(f"{e}")
-    def complete(self, text: str, state: int) -> Optional[str]:
-        ALL_COMMANDS = (
-            self._ctx.get_built_in_commands() + self._ctx._utils.get_exe_list()
-        )
-        matches = [cmd + " " for cmd in ALL_COMMANDS if cmd.startswith(text)]
+            tab_pressed = False
+            if state < len(matches):
+                return matches[state]
+            else:
+                return None
+
+    elif len(matches) == 1:
         return matches[state] if state < len(matches) else None
-    def handle_external_command(
-        self,
-        command_name: str,
-        args: list[str],
-        output_stream: Optional[TextIO] = sys.stdout,
-        err_stream: Optional[TextIO] = sys.stderr,
-    ) -> None:
-        subprocess = self._ctx._utils.get_subprocess()
-        is_executable, _ = self._ctx._utils.search_for_exe(command_name)
-        if not is_executable:
-            if err_stream:
-                err_stream.write(f"{command_name}: not found\n")
-        else:
-            command_args = [command_name] + args
-            subprocess.call(command_args, stdout=output_stream, stderr=err_stream)
-    def execute_parsed_input(self, parsed_input: ParsedInput):
-        command = self._factory.create_command(
-            parsed_input.command_name, parsed_input.args
-        )
-        output_stream = sys.stdout
-        err_stream = sys.stderr
-        # handle redirection and appending of stdout and stderr
-        if parsed_input.redirect_to_stdout:
-            if (
-                parsed_input.redirection_symbol == ">>"
-                or parsed_input.redirection_symbol == "1>>"
-            ):
-                output_stream = open(parsed_input.redirect_to_stdout, "a+")
-            else:
-                output_stream = open(parsed_input.redirect_to_stdout, "w")
-        if parsed_input.redirect_to_stderr:
-            if parsed_input.redirection_symbol == "2>>":
-                err_stream = open(parsed_input.redirect_to_stderr, "a+")
-            else:
-                err_stream = open(parsed_input.redirect_to_stderr, "w")
-        try:
-            if command:
-                # explicitly handle exit command
-                if parsed_input.command_name == "exit":
-                    if parsed_input.redirect_to_stdout:
-                        output_stream.close()
-                    if parsed_input.redirect_to_stderr:
-                        err_stream.close()
-                    command.execute()
-                    return 0
-                # else handle the command
-                command.execute(output_stream=output_stream, err_stream=err_stream)
-            elif (
-                # handle external commands
-                parsed_input.command_name not in self._ctx.get_built_in_commands()
-                and parsed_input.args
-                and isinstance(parsed_input.args, list)
-            ):
-                self.handle_external_command(
-                    parsed_input.command_name,
-                    parsed_input.args,
-                    output_stream,
-                    err_stream,
-                )
-            else:
-                if err_stream:
-                    err_stream.write(
-                        f"{parsed_input.command_name}: command not found\n"
-                    )
-        finally:
-            if parsed_input.redirect_to_stdout:
-                output_stream.close()
-            if parsed_input.redirect_to_stderr:
-                err_stream.close()
+
+    return None
+
+
 def main():
-    shell = Shell()
-    parser = InputParser()
+    global tab_pressed
+    readline.set_completer(completer)
+    readline.parse_and_bind("tab: complete")
+
     while True:
         sys.stdout.write("$ ")
-        # TODO: implement autocomplete
+        sys.stdout.flush()
         try:
-            input_line = input()
-            parsed_input = parser.parse(input_line)
-            shell.execute_parsed_input(parsed_input)
+            command_line = input().strip()
+            if not command_line:
+                continue
+
+            tab_pressed = False
+
+            args = shlex.split(command_line)
+            if not args:
+                continue
+
+            command = args[0]
+
+            if command == "exit":
+                sys.exit(0)
+            elif command == "echo":
+                sys.stdout.write(" ".join(args[1:]) + "\n")
+                sys.stdout.flush()
+            elif command == "pwd":
+                sys.stdout.write(os.getcwd() + "\n")
+                sys.stdout.flush()
+            elif command == "cd":
+                directory = args[1] if len(args) > 1 else os.environ.get("HOME", "/")
+                try:
+                    os.chdir(directory)
+                except Exception as e:
+                    sys.stderr.write(f"cd: {directory}: {str(e)}\n")
+                    sys.stderr.flush()
+                sys.stdout.flush()
+            elif command == "type":
+                if len(args) < 2:
+                    sys.stderr.write("type: missing argument\n")
+                    sys.stderr.flush()
+                else:
+                    new_command = args[1]
+                    if new_command in ["echo", "exit", "type", "pwd", "cd"]:
+                        sys.stdout.write(f"{new_command} is a shell builtin\n")
+                        sys.stdout.flush()
+                    else:
+                        found = False
+                        for path in os.environ.get("PATH", "").split(os.pathsep):
+                            full_path = os.path.join(path, new_command)
+                            if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
+                                sys.stdout.write(f"{new_command} is {full_path}\n")
+                                sys.stdout.flush()
+                                found = True
+                                break
+                        if not found:
+                            sys.stderr.write(f"{new_command}: not found\n")
+                            sys.stderr.flush()
+            else:
+                try:
+                    result = subprocess.run(args, capture_output=True, text=True, check=True)
+                    sys.stdout.write(result.stdout.strip())  # Remove extra whitespace
+                    sys.stderr.write(result.stderr.strip())  # Remove extra whitespace
+                    sys.stdout.flush()
+                    sys.stderr.flush()
+                except subprocess.CalledProcessError as e:
+                    sys.stderr.write(f"Error: {e}\n")
+                    sys.stderr.write(e.stderr.strip())  # Remove extra whitespace
+                    sys.stderr.flush()
+                except Exception as e:
+                    sys.stderr.write(f"Error: {e}\n")
+                    sys.stderr.flush()
+
         except EOFError:
+            sys.stdout.write("\n")
             break
+        except Exception as e:
+            sys.stderr.write(f"Error: {e}\n")
+            sys.stderr.flush()
+
+
 if __name__ == "__main__":
     main()
