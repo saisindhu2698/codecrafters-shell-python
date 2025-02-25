@@ -1,3 +1,4 @@
+app/main.py
 from collections.abc import Mapping
 import readline
 import shlex
@@ -14,7 +15,16 @@ SHELL_BUILTINS: Final[list[str]] = [
     "cd",
 ]
 def parse_programs_in_path(path: str, programs: dict[str, pathlib.Path]) -> None:
-Expand 14 lines
+    """Creates a mapping of programs in path to their paths"""
+    for p, _, bins in pathlib.Path(path).walk():
+        for b in bins:
+            programs[b] = p / b
+def generate_program_paths() -> Mapping[str, pathlib.Path]:
+    programs: dict[str, pathlib.Path] = {}
+    for p in (os.getenv("PATH") or "").split(":"):
+        parse_programs_in_path(p, programs)
+    return programs
+PROGRAMS_IN_PATH: Final[Mapping[str, pathlib.Path]] = {**generate_program_paths()}
 COMPLETIONS: Final[list[str]] = [*SHELL_BUILTINS, *PROGRAMS_IN_PATH.keys()]
 def display_matches(substitution, matches, longest_match_length):
     print()
