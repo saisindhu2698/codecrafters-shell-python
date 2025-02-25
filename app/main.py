@@ -34,10 +34,11 @@ def completer(text, state):
     if len(matches) > 1:
         common_prefix = longest_common_prefix(matches)
         if common_prefix and common_prefix != text:
-            return common_prefix + " " if state == 0 else None
-        print("\n" + "  ".join(matches))
-        sys.stdout.write("$ " + text)
-        sys.stdout.flush()
+            return common_prefix if state == 0 else None
+        if state == 0:
+            print("\n" + "  ".join(matches))
+            sys.stdout.write("$ " + text)
+            sys.stdout.flush()
         return None
     
     return matches[state] + " " if state < len(matches) else None
