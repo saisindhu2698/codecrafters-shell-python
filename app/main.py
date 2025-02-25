@@ -59,9 +59,35 @@ def main():
             if not command_line:
                 continue
             
+            # Check if the command has output redirection (`>` or `1>`)
+            if ">" in command_line:
+                parts = command_line.split(">")
+                command = parts[0].strip()
+                output_file = parts[1].strip()
+
+                # Handle file redirection
+                with open(output_file, "w") as f:
+                    args = shlex.split(command)
+                    cmd_path = None
+                    for path in PATH.split(os.pathsep):
+                        full_path = os.path.join(path, args[0])
+                        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
+                            cmd_path = full_path
+                            break
+                    if cmd_path:
+                        try:
+                            result = subprocess.run(args, capture_output=True, text=True)
+                            f.write(result.stdout)  # Write stdout to file
+                            f.write(result.stderr)  # Write stderr to file if any
+                        except Exception as e:
+                            sys.stderr.write(f"Error executing command: {e}\n")
+                    else:
+                        sys.stderr.write(f"{args[0]}: command not found\n")
+                continue
+            
+            # Normal command execution (without redirection)
             args = shlex.split(command_line)
             command = args[0]
-            
             if command == "exit":
                 sys.exit(0)
             elif command == "echo":
