@@ -4,18 +4,22 @@ import readline
 import shlex
 import subprocess
 
-# Global dictionary to track autocomplete state
 auto_complete_state = {}
 
+def longest_common_prefix(strs):
+    if not strs:
+        return ""
+    shortest = min(strs, key=len)
+    for i, char in enumerate(shortest):
+        for other in strs:
+            if other[i] != char:
+                return shortest[:i]
+    return shortest
+
 def completer(text, state):
-    """Autocomplete function for built-in commands and external executables in PATH."""
     builtin = ["echo", "exit", "type", "pwd", "cd"]
-    matches = []
+    matches = [cmd for cmd in builtin if cmd.startswith(text)]
     
-    # Check for built-in commands
-    matches.extend([cmd for cmd in builtin if cmd.startswith(text)])
-    
-    # Check for external executable commands in PATH
     path_dirs = os.environ.get("PATH", "").split(os.pathsep)
     for directory in path_dirs:
         try:
@@ -23,31 +27,24 @@ def completer(text, state):
                 if filename.startswith(text) and os.access(os.path.join(directory, filename), os.X_OK):
                     matches.append(filename)
         except FileNotFoundError:
-            continue  # Ignore missing directories
+            continue
     
-    # If there are multiple matches, handle tab completion behavior
     if len(matches) > 1:
-        if text in auto_complete_state and auto_complete_state[text] == 1:
-            print("\n" + "  ".join(matches))  # Print matches separated by 2 spaces
-            sys.stdout.write("$ " + text)  # Reprint prompt with the current input
-            sys.stdout.flush()
-            auto_complete_state[text] = 0  # Reset state
-            return None
-        else:
-            sys.stdout.write("\a")  # Ring a bell
-            sys.stdout.flush()
-            auto_complete_state[text] = 1  # Set state to indicate first tab press
-            return None
+        common_prefix = longest_common_prefix(matches)
+        if common_prefix and common_prefix != text:
+            return common_prefix + " " if state == 0 else None
+        print("\n" + "  ".join(matches))
+        sys.stdout.write("$ " + text)
+        sys.stdout.flush()
+        return None
     
     return matches[state] + " " if state < len(matches) else None
-
 
 def main():
     builtin = ["echo", "exit", "type", "pwd", "cd"]
     PATH = os.environ.get("PATH")
-    HOME = os.environ.get("HOME")  # Get the user's home directory
+    HOME = os.environ.get("HOME")
     
-    # Set up autocomplete
     readline.set_completer(completer)
     readline.parse_and_bind("tab: complete")
     
