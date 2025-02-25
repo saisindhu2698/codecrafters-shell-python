@@ -4,8 +4,6 @@ import readline
 import shlex
 import subprocess
 
-auto_complete_state = {}
-
 def longest_common_prefix(strs):
     if not strs:
         return ""
@@ -58,27 +56,38 @@ def main():
             command_line = input().strip()
             if not command_line:
                 continue
-            
-            # Check if the command has output redirection (`>` or `1>`)
+
+            # Normalize redirection so that both ">" and "1>" are treated the same.
+            command_line = command_line.replace("1>", ">")
+
+            # Check if the command has output redirection
             if ">" in command_line:
                 parts = command_line.split(">")
-                command = parts[0].strip()
+                command_part = parts[0].strip()
                 output_file = parts[1].strip()
 
-                # Handle file redirection
+                args = shlex.split(command_part)
+                if not args:
+                    continue
+
+                # Open the file for writing
                 with open(output_file, "w") as f:
-                    args = shlex.split(command)
                     cmd_path = None
                     for path in PATH.split(os.pathsep):
                         full_path = os.path.join(path, args[0])
                         if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
                             cmd_path = full_path
                             break
-                    if cmd_path:
+
+                    # Builtin echo handling, for example
+                    if args[0] == "echo":
+                        # Only echo the arguments
+                        f.write(" ".join(args[1:]) + "\n")
+                    elif cmd_path:
                         try:
                             result = subprocess.run(args, capture_output=True, text=True)
-                            f.write(result.stdout)  # Write stdout to file
-                            f.write(result.stderr)  # Write stderr to file if any
+                            f.write(result.stdout)
+                            f.write(result.stderr)
                         except Exception as e:
                             sys.stderr.write(f"Error executing command: {e}\n")
                     else:
@@ -87,7 +96,10 @@ def main():
             
             # Normal command execution (without redirection)
             args = shlex.split(command_line)
+            if not args:
+                continue
             command = args[0]
+            
             if command == "exit":
                 sys.exit(0)
             elif command == "echo":
