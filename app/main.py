@@ -4,10 +4,36 @@ import readline
 import shlex
 import subprocess
 
+def longest_common_prefix(strs):
+    if not strs:
+        return ""
+    shortest = min(strs, key=len)
+    for i, char in enumerate(shortest):
+        for other in strs:
+            if other[i] != char:
+                return shortest[:i]
+    return shortest
+
+def completer(text, state):
+    matches = []
+    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+    for directory in path_dirs:
+        try:
+            for filename in os.listdir(directory):
+                if filename.startswith(text) and os.access(os.path.join(directory, filename), os.X_OK):
+                    matches.append(filename)
+        except FileNotFoundError:
+            continue
+    matches = sorted(matches)
+    if state < len(matches):
+        return matches[state] + " "
+    return None
+
 def main():
     PATH = os.environ.get("PATH")
     HOME = os.environ.get("HOME")
     
+    readline.set_completer(completer)
     readline.parse_and_bind("tab: complete")
     
     while True:
