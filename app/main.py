@@ -32,13 +32,13 @@ def completer(text, state):
         if state == 0:
             if not tab_pressed:
                 tab_pressed = True
-                sys.stdout.write("\a")
+                sys.stdout.write("\a")  # Ring the bell
                 sys.stdout.flush()
                 return None
             else:
                 tab_pressed = False
-                output_string = "  ".join(matches)
-                sys.stdout.write("\n" + output_string.strip() + "\n$ " + text)  # Remove extra whitespace
+                output_string = "  ".join(matches)  # Two spaces between executables
+                sys.stdout.write("\n" + output_string.strip() + "\n$ " + text)
                 sys.stdout.flush()
                 return None
         else:
