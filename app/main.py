@@ -65,22 +65,36 @@ readline.parse_and_bind("tab: complete")
 def main():
     while True:
         sys.stdout.write("$ ")
-        sys.stdout.flush() # Important to flush stdout
-        cmds = shlex.split(input())
-        out = sys.stdout
-        err = sys.stderr
-        close_out = False
-        close_err = False
+        sys.stdout.flush()  # Important to flush stdout
         try:
-            # ... (redirection handling remains the same)
+            command_line = input()
+            cmds = shlex.split(command_line)
+            out = sys.stdout
+            err = sys.stderr
+            close_out = False
+            close_err = False
+            try:
+                # ... (redirection handling remains the same)
 
-            handle_all(cmds, out, err)
+                handle_all(cmds, out, err)
 
-        finally:
-            if close_out:
-                out.close()
-            if close_err:
-                err.close()
+            finally:
+                if close_out:
+                    out.close()
+                if close_err:
+                    err.close()
+
+            if command_line and (len(complete(command_line.split()[0], 0)) == 1 or len(complete(command_line.split()[0], 0)) == 0):
+                sys.stdout.write(" ")
+                sys.stdout.flush()
+
+        except EOFError:
+            print() # Handle Ctrl+D
+            break
+
+        except KeyboardInterrupt: #Handle Ctrl+C
+            print()
+            break
 
 
 def handle_all(cmds: list[str], out: TextIO, err: TextIO):
@@ -89,7 +103,7 @@ def handle_all(cmds: list[str], out: TextIO, err: TextIO):
             out.write(" ".join(s) + "\n")
         case ["type", s]:
             type_command(s, out, err)
-        case ["exit", "0"]:
+        case ["exit"]:  # Exit with any code
             sys.exit(0)
         case ["pwd"]:
             out.write(f"{os.getcwd()}\n")
@@ -122,7 +136,10 @@ def cd(path: str, out: TextIO, err: TextIO) -> None:
     if not p.exists():
         out.write(f"cd: {path}: No such file or directory\n")
         return
-    os.chdir(p)
+    try:
+        os.chdir(p)
+    except OSError as e: # Handle cd errors gracefully
+        out.write(f"cd: {path}: {e}\n")
 
 
 if __name__ == "__main__":
