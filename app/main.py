@@ -15,16 +15,18 @@ def completer(text, state):
 
     if not matches:
         path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+        seen = set()  # Keep track of seen filenames
         for directory in path_dirs:
             try:
                 for filename in os.listdir(directory):
-                    full_path = os.path.join(directory, filename)  # Store full path
-                    if filename.startswith(text) and os.access(full_path, os.X_OK) and os.path.isfile(full_path): # Check if is file
+                    full_path = os.path.join(directory, filename)
+                    if filename.startswith(text) and os.access(full_path, os.X_OK) and os.path.isfile(full_path) and filename not in seen:
                         matches.append(filename)
+                        seen.add(filename)  # Mark as seen
             except FileNotFoundError:
                 continue
 
-    matches.sort()  # Sort *after* collecting all matches
+    matches.sort()
 
     if len(matches) > 1:
         if state == 0:
@@ -32,14 +34,13 @@ def completer(text, state):
                 tab_pressed = True
                 sys.stdout.write("\a")
                 sys.stdout.flush()
-                return None  # Important: Return None to indicate more matches
+                return None
             else:
                 tab_pressed = False
-                # Join with spaces, then add newline and prompt
                 sys.stdout.write("\n" + " ".join(matches) + "\n$ " + text)
                 sys.stdout.flush()
                 return None
-        else: # state > 0
+        else:
             if state < len(matches):
                 return matches[state]
             else:
