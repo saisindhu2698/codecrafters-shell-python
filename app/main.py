@@ -49,7 +49,7 @@ def execute_command(args, redirect_file=None):
     HOME = os.environ.get("HOME")
     command = args[0]
     
-    # If we need to redirect output, set up a temporary stdout replacement.
+    # If redirection is specified, open the file and set it as our target output.
     if redirect_file:
         try:
             f = open(redirect_file, "w")
@@ -109,7 +109,6 @@ def execute_command(args, redirect_file=None):
                 break
         if cmd_path:
             try:
-                # If redirection is requested, use the file handle.
                 if redirect_file:
                     result = subprocess.run(args, stdout=target_stdout, stderr=subprocess.PIPE, text=True)
                     if result.stderr:
@@ -141,14 +140,20 @@ def main():
             # Use shlex to properly split the command line.
             args = shlex.split(command_line)
             
-            # Check for output redirection operator '>'
+            # Check for output redirection operators: ">" or "1>"
+            redirect_op = None
             if ">" in args:
-                redirect_index = args.index(">")
+                redirect_op = ">"
+            elif "1>" in args:
+                redirect_op = "1>"
+                
+            if redirect_op:
+                redirect_index = args.index(redirect_op)
                 if redirect_index + 1 >= len(args):
-                    sys.stderr.write("Syntax error: expected filename after '>'\n")
+                    sys.stderr.write("Syntax error: expected filename after redirection operator\n")
                     continue
                 redirect_file = args[redirect_index + 1]
-                # Remove redirection operator and file from args.
+                # Remove redirection operator and the filename from args.
                 args = args[:redirect_index]
                 if not args:
                     sys.stderr.write("Syntax error: no command specified before redirection\n")
