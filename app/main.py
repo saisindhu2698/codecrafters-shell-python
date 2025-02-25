@@ -39,7 +39,6 @@ def display_matches(substitution, matches, longest_match_length):
         sys.stdout.flush() # Flush immediately after printing matches
     print("\n$ " + substitution, end="") # Prompt on the next line
     sys.stdout.flush() # Flush after printing the prompt
-    readline.redisplay() # Force readline to update the display
 
 
 def complete(text: str, state: int) -> str | None:
