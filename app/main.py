@@ -19,6 +19,9 @@ def main():
                 continue
             
             args = shlex.split(command_line)
+            output_file = None
+            redir_index = None
+            
             if '>' in args or '1>' in args:
                 redir_index = args.index('>') if '>' in args else args.index('1>')
                 if len(args) <= redir_index + 1:
@@ -26,8 +29,6 @@ def main():
                     continue
                 output_file = args[redir_index + 1]
                 args = args[:redir_index]
-            else:
-                output_file = None
             
             if not args:
                 continue
@@ -65,7 +66,7 @@ def main():
                     try:
                         result = subprocess.run(args, capture_output=True, text=True)
                         output = result.stdout
-                        sys.stderr.write(result.stderr)
+                        error_output = result.stderr
                     except Exception as e:
                         sys.stderr.write(f"Error executing command: {e}\n")
                         continue
@@ -76,11 +77,17 @@ def main():
             if output_file:
                 try:
                     with open(output_file, "w") as f:
-                        f.write(output)
+                        if output:
+                            f.write(output)
+                    if error_output:
+                        sys.stderr.write(error_output)
                 except Exception as e:
                     sys.stderr.write(f"Error writing to file {output_file}: {e}\n")
             else:
-                sys.stdout.write(output)
+                if output:
+                    sys.stdout.write(output)
+                if error_output:
+                    sys.stderr.write(error_output)
             sys.stdout.flush()
         except EOFError:
             sys.stdout.write("\n")
