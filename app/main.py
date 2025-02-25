@@ -1,202 +1,88 @@
-import sys
-import os
+import pathlib
 import readline
-import shlex
-import subprocess
+from typing import Final
 
-# Track the last completion attempt
-last_completion = {"prefix": "", "tab_count": 0}
+SHELL_BUILTINS: Final[list[str]] = [
+    "echo",
+    "exit",
+    "type",
+    "pwd",
+    "cd",
+]
 
-def completer(text, state):
-    """Autocomplete function for built-in commands and external executables in PATH."""
-    global last_completion
+# Let's assume PROGRAMS_IN_PATH is built elsewhere:
+PROGRAMS_IN_PATH: dict[str, pathlib.Path] = {
+    # e.g., "ls": pathlib.Path("/bin/ls"),
+    # Populate with executables found in PATH...
+}
 
-    builtin = ["echo ", "exit ", "type ", "pwd ", "cd "]
-    matches = []
+COMPLETIONS: Final[list[str]] = [*SHELL_BUILTINS, *PROGRAMS_IN_PATH.keys()]
 
-    # Reset tab count if the text has changed
-    if last_completion["prefix"] != text:
-        last_completion["prefix"] = text
-        last_completion["tab_count"] = 0
+# Global variables to track completion state
+_last_text: str = ""
+_tab_count: int = 0
 
-    # First check for built-in commands
-    matches.extend([cmd for cmd in builtin if cmd.startswith(text)])
+def display_matches(substitution: str, matches: list[str], longest_match_length: int) -> None:
+    """Hook for readline that displays matches after the second TAB press."""
+    # Only print matches if more than one option
+    if matches:
+        print()  # newline before list
+        print("  ".join(matches))
+    # Reprint the prompt with current substitution
+    print("$ " + substitution, end="")
 
-    # Then check for external executable commands in PATH
-    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
-    for directory in path_dirs:
-        try:
-            for filename in os.listdir(directory):
-                if filename.startswith(text) and os.access(os.path.join(directory, filename), os.X_OK):
-                    matches.append(filename)
-        except FileNotFoundError:
-            continue  # Skip directories that do not exist
+def complete(text: str, state: int) -> str | None:
+    """
+    A completer function that, if multiple matches exist, rings a bell on the first TAB press
+    and shows all matching completions on the second TAB press.
+    """
+    global _last_text, _tab_count
 
-    if not matches:
+    # Compute all matches starting with the given text.
+    matches = sorted({s for s in COMPLETIONS if s.startswith(text)})
+
+    # If the completion text changed, reset the tab counter.
+    if text != _last_text:
+        _last_text = text
+        _tab_count = 0
+
+    # Only when multiple matches exist do we handle the TAB behavior.
+    if len(matches) > 1:
+        if _tab_count == 0:
+            # On the first TAB press, ring the bell.
+            print("\a", end="", flush=True)
+            _tab_count += 1
+            return None  # Do not complete yet.
+        elif _tab_count == 1:
+            # On the second TAB press, the display hook will be used to show matches.
+            _tab_count = 0  # Reset for next round.
+            # Return None so that readline calls the display hook.
+            return None
+
+    # If exactly one match exists or we're iterating over matches,
+    # then return the match. Append a space if it is a builtin.
+    if matches:
+        candidate = matches[state] if state < len(matches) else None
+        if candidate is None:
+            return None
+        if candidate in SHELL_BUILTINS:
+            return candidate + " "
+        else:
+            return candidate + " "  # For external commands, add a space.
+    else:
         return None
 
-    # If multiple matches exist, handle tab press behavior
-    if len(matches) > 1:
-        last_completion["tab_count"] += 1
-        if last_completion["tab_count"] == 1:
-            sys.stdout.write("\a")  # Bell sound on first tab press
-            sys.stdout.flush()
-            return None
-        elif last_completion["tab_count"] == 2:
-            sys.stdout.write("\n" + "  ".join(matches) + "\n$ " + text)
-            sys.stdout.flush()
-            last_completion["tab_count"] = 0
-            return None
+# Set the custom display hook and completer.
+readline.set_completion_display_matches_hook(display_matches)
+readline.set_completer(complete)
+readline.parse_and_bind("tab: complete")
 
-    return matches[state] if state < len(matches) else None
-
-def main():
-    builtin = ["echo", "exit", "type", "pwd", "cd"]
-    PATH = os.environ.get("PATH")
-    HOME = os.environ.get("HOME")  # Get the user's home directory
-    
-    # Set up autocomplete
-    readline.set_completer(completer)
-    readline.parse_and_bind("tab: complete")
-
-    while True:
-        # Prompt for input
-        sys.stdout.write("$ ")
-        sys.stdout.flush()
-        try:
-            command_line = input().strip()
-            if not command_line:
-                continue
-            
-            # Handle stderr redirection (2>>)
-            if "2>>" in command_line:
-                parts = shlex.split(command_line)
-                split_index = parts.index("2>>")
-                command_args = parts[:split_index]
-                error_file = parts[split_index + 1]
-                with open(error_file, "a") as f:
-                    result = subprocess.run(command_args, stdout=subprocess.PIPE, stderr=f, text=True)
-                if result.stdout:
-                    sys.stdout.write(result.stdout)
-                    sys.stdout.flush()
-                continue
-
-            # Handle stdout redirection (>>) or (1>>)
-            if ">>" in command_line or "1>>" in command_line:
-                parts = shlex.split(command_line)
-                split_index = parts.index(">>") if ">>" in parts else parts.index("1>>")
-                command_args = parts[:split_index]
-                output_file = parts[split_index + 1]
-                with open(output_file, "a") as f:
-                    result = subprocess.run(command_args, stdout=f, stderr=subprocess.PIPE, text=True)
-                if result.stderr:
-                    sys.stderr.write(result.stderr)
-                    sys.stderr.flush()
-                continue
-
-            # Handle stderr redirection (2>)
-            if "2>" in command_line:
-                parts = shlex.split(command_line)
-                split_index = parts.index("2>")
-                command_args = parts[:split_index]
-                error_file = parts[split_index + 1]
-                with open(error_file, "w") as f:
-                    result = subprocess.run(command_args, stdout=subprocess.PIPE, stderr=f, text=True)
-                if result.stdout:
-                    sys.stdout.write(result.stdout)
-                    sys.stdout.flush()
-                continue
-
-            # Handle stdout redirection (>) or (1>)
-            if ">" in command_line or "1>" in command_line:
-                parts = shlex.split(command_line)
-                split_index = parts.index(">") if ">" in parts else parts.index("1>")
-                command_args = parts[:split_index]
-                output_file = parts[split_index + 1]
-                with open(output_file, "w") as f:
-                    result = subprocess.run(command_args, stdout=f, stderr=subprocess.PIPE, text=True)
-                if result.stderr:
-                    sys.stderr.write(result.stderr)
-                    sys.stderr.flush()
-                continue
-
-            args = shlex.split(command_line)  # Properly split command while handling quotes
-            command = args[0]
-
-            # Handle "exit"
-            if command == "exit":
-                sys.exit(0)
-
-            # Handle "echo"
-            elif command == "echo":
-                output = " ".join(args[1:])
-                sys.stdout.write(output + "\n")
-                sys.stdout.flush()
-
-            # Handle "pwd"
-            elif command == "pwd":
-                sys.stdout.write(os.getcwd() + "\n")
-                sys.stdout.flush()
-
-            # Handle "cd"
-            elif command == "cd":
-                directory = args[1] if len(args) > 1 else HOME
-                if directory == "~":
-                    directory = HOME
-                try:
-                    os.chdir(directory)
-                except FileNotFoundError:
-                    sys.stderr.write(f"cd: {directory}: No such file or directory\n")
-                except PermissionError:
-                    sys.stderr.write(f"cd: {directory}: Permission denied\n")
-                except Exception as e:
-                    sys.stderr.write(f"cd: {directory}: {str(e)}\n")
-                sys.stdout.flush()
-
-            # Handle "type"
-            elif command == "type":
-                if len(args) < 2:
-                    sys.stderr.write("type: missing argument\n")
-                else:
-                    new_command = args[1]
-                    cmd_path = None
-                    for path in PATH.split(os.pathsep):
-                        full_path = os.path.join(path, new_command)
-                        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
-                            cmd_path = full_path
-                            break
-                    if new_command in builtin:
-                        sys.stdout.write(f"{new_command} is a shell builtin\n")
-                    elif cmd_path:
-                        sys.stdout.write(f"{new_command} is {cmd_path}\n")
-                    else:
-                        sys.stderr.write(f"{new_command}: not found\n")
-                sys.stdout.flush()
-
-            # Handle external commands
-            else:
-                cmd_path = None
-                for path in PATH.split(os.pathsep):
-                    full_path = os.path.join(path, command)
-                    if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
-                        cmd_path = full_path
-                        break
-                if cmd_path:
-                    try:
-                        result = subprocess.run(args, capture_output=True, text=True)
-                        sys.stdout.write(result.stdout)
-                        sys.stderr.write(result.stderr)
-                    except Exception as e:
-                        sys.stderr.write(f"Error executing command: {e}\n")
-                else:
-                    sys.stderr.write(f"{command}: command not found\n")
-                sys.stdout.flush()
-        except EOFError:
-            sys.stdout.write("\n")
-            break
-        except Exception as e:
-            sys.stderr.write(f"Error: {e}\n")
-            sys.stdout.flush()
-
+# A simple loop to test completion behavior.
 if __name__ == "__main__":
-    main()
+    try:
+        while True:
+            line = input("$ ")
+            # For testing, simply echo the entered command.
+            print("You entered:", line)
+    except EOFError:
+        print()  # For a graceful exit.
