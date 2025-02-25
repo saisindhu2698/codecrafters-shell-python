@@ -24,7 +24,6 @@ _tab_count: int = 0
 
 def display_matches(substitution: str, matches: list[str], longest_match_length: int) -> None:
     """Hook for readline that displays matches after the second TAB press."""
-    # Only print matches if more than one option
     if matches:
         print()  # newline before list
         print("  ".join(matches))
@@ -41,34 +40,30 @@ def complete(text: str, state: int) -> str | None:
     # Compute all matches starting with the given text.
     matches = sorted({s for s in COMPLETIONS if s.startswith(text)})
 
-    # If the completion text changed, reset the tab counter.
+    # Reset tab counter if the text has changed.
     if text != _last_text:
         _last_text = text
         _tab_count = 0
 
-    # Only when multiple matches exist do we handle the TAB behavior.
+    # If multiple matches exist, handle the TAB behavior.
     if len(matches) > 1:
         if _tab_count == 0:
-            # On the first TAB press, ring the bell.
+            # On first TAB press, ring the bell.
             print("\a", end="", flush=True)
             _tab_count += 1
             return None  # Do not complete yet.
         elif _tab_count == 1:
-            # On the second TAB press, the display hook will be used to show matches.
+            # On the second TAB press, display the matches using the display hook.
             _tab_count = 0  # Reset for next round.
-            # Return None so that readline calls the display hook.
             return None
 
-    # If exactly one match exists or we're iterating over matches,
-    # then return the match. Append a space if it is a builtin.
+    # If one match exists (or we're iterating over matches), return the match.
     if matches:
         candidate = matches[state] if state < len(matches) else None
         if candidate is None:
             return None
-        if candidate in SHELL_BUILTINS:
-            return candidate + " "
-        else:
-            return candidate + " "  # For external commands, add a space.
+        # Append a space after the completed command.
+        return candidate + " "
     else:
         return None
 
@@ -77,12 +72,11 @@ readline.set_completion_display_matches_hook(display_matches)
 readline.set_completer(complete)
 readline.parse_and_bind("tab: complete")
 
-# A simple loop to test completion behavior.
 if __name__ == "__main__":
     try:
         while True:
             line = input("$ ")
-            # For testing, simply echo the entered command.
             print("You entered:", line)
     except EOFError:
         print()  # For a graceful exit.
+        pass
