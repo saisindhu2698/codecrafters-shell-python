@@ -37,7 +37,7 @@ COMPLETIONS: Final[list[str]] = [*SHELL_BUILTINS, *PROGRAMS_IN_PATH.keys()]
 def display_matches(substitution, matches, longest_match_length):
     if matches:
         print()
-        print("  ".join(matches))
+        print("  ".join(matches))  # Two spaces between matches
     print("$ " + substitution, end="")
 
 
@@ -46,14 +46,14 @@ def complete(text: str, state: int) -> str | None:
     matches.sort()  # Sort here for all cases
 
     if len(matches) > 1:
-        if state == 0:
-            readline.set_completion_display_matches_hook(display_matches)  # Hook only for multiple matches
-            return None  # Ring bell, display matches on next tab press (handled by readline)
-        else:
+        if state == 0:  # First tab press
+            readline.set_completion_display_matches_hook(display_matches)
+            return None  # Ring bell, display matches on next tab press
+        else:  # Second tab press and subsequent
             return None  # readline handles insertion
 
     elif len(matches) == 1:
-        return matches[0] + " " if state == 0 else None  # Single match completion, add space
+        return matches[0] + " " if state == 0 else None  # Single match, add space
 
     return None
 
@@ -65,7 +65,7 @@ readline.parse_and_bind("tab: complete")
 def main():
     while True:
         sys.stdout.write("$ ")
-        sys.stdout.flush()  # Important to flush stdout
+        sys.stdout.flush()  # Crucial: Flush stdout after prompt
         try:
             command_line = input()
             cmds = shlex.split(command_line)
@@ -74,7 +74,39 @@ def main():
             close_out = False
             close_err = False
             try:
-                # ... (redirection handling remains the same)
+                if ">" in cmds:
+                    out_index = cmds.index(">")
+                    out = open(cmds[out_index + 1], "w")
+                    close_out = True
+                    cmds = cmds[:out_index] + cmds[out_index + 2:]
+                elif "1>" in cmds:
+                    out_index = cmds.index("1>")
+                    out = open(cmds[out_index + 1], "w")
+                    close_out = True
+                    cmds = cmds[:out_index] + cmds[out_index + 2:]
+
+                if "2>" in cmds:
+                    out_index = cmds.index("2>")
+                    err = open(cmds[out_index + 1], "w")
+                    close_err = True
+                    cmds = cmds[:out_index] + cmds[out_index + 2:]
+
+                if ">>" in cmds:
+                    out_index = cmds.index(">>")
+                    out = open(cmds[out_index + 1], "a")
+                    close_out = True
+                    cmds = cmds[:out_index] + cmds[out_index + 2:]
+                elif "1>>" in cmds:
+                    out_index = cmds.index("1>>")
+                    out = open(cmds[out_index + 1], "a")
+                    close_out = True
+                    cmds = cmds[:out_index] + cmds[out_index + 2:]
+
+                if "2>>" in cmds:
+                    out_index = cmds.index("2>>")
+                    err = open(cmds[out_index + 1], "a")
+                    close_err = True
+                    cmds = cmds[:out_index] + cmds[out_index + 2:]
 
                 handle_all(cmds, out, err)
 
@@ -85,14 +117,14 @@ def main():
                     err.close()
 
             if command_line and (len(complete(command_line.split()[0], 0)) == 1 or len(complete(command_line.split()[0], 0)) == 0):
-                sys.stdout.write(" ")
+                sys.stdout.write(" ")  # Space after command execution
                 sys.stdout.flush()
 
         except EOFError:
-            print() # Handle Ctrl+D
+            print()  # Handle Ctrl+D
             break
 
-        except KeyboardInterrupt: #Handle Ctrl+C
+        except KeyboardInterrupt:  # Handle Ctrl+C
             print()
             break
 
@@ -138,7 +170,7 @@ def cd(path: str, out: TextIO, err: TextIO) -> None:
         return
     try:
         os.chdir(p)
-    except OSError as e: # Handle cd errors gracefully
+    except OSError as e:  # Handle cd errors gracefully
         out.write(f"cd: {path}: {e}\n")
 
 
