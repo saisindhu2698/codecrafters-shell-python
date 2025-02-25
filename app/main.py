@@ -1,33 +1,92 @@
-import os
 import sys
+import os
+import readline
 import shlex
 import subprocess
 
-def execute_command(command):
-    tokens = shlex.split(command)  # Split the command safely
-    if '>' in tokens:
-        op_index = tokens.index('>') if '>' in tokens else tokens.index('1>')
-        cmd = tokens[:op_index]  # Command part
-        output_file = tokens[op_index + 1]  # File name
-
-        with open(output_file, 'w') as outfile:
-            process = subprocess.Popen(cmd, stdout=outfile, stderr=sys.stderr)
-            process.communicate()
-    else:
-        process = subprocess.Popen(tokens, stdout=sys.stdout, stderr=sys.stderr)
-        process.communicate()
-
-def shell():
-    while True:
+def completer(text, state):
+    matches = []
+    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+    for directory in path_dirs:
         try:
-            command = input("$ ")  # Prompt for user input
-            if command.strip().lower() == "exit":
-                break
-            execute_command(command)
+            for filename in os.listdir(directory):
+                if filename.startswith(text) and os.access(os.path.join(directory, filename), os.X_OK):
+                    matches.append(filename)
+        except FileNotFoundError:
+            continue
+    matches = sorted(matches)
+    return matches[state] if state < len(matches) else None
+
+def main():
+    HOME = os.environ.get("HOME", "")
+    readline.set_completer(completer)
+    readline.parse_and_bind("tab: complete")
+    
+    while True:
+        sys.stdout.write("$ ")
+        sys.stdout.flush()
+        try:
+            command_line = input().strip()
+            if not command_line:
+                continue
+            
+            args = shlex.split(command_line)
+            output_file = None
+            if '>' in args or '1>' in args:
+                redir_index = args.index('>') if '>' in args else args.index('1>')
+                if redir_index + 1 >= len(args):
+                    sys.stderr.write("Error: No file specified for redirection\n")
+                    continue
+                output_file = args[redir_index + 1]
+                args = args[:redir_index]
+            
+            if not args:
+                continue
+            
+            command = args[0]
+            if command == "exit":
+                sys.exit(0)
+            elif command == "pwd":
+                output = os.getcwd() + "\n"
+            elif command == "cd":
+                directory = args[1] if len(args) > 1 else HOME
+                try:
+                    os.chdir(directory)
+                except Exception as e:
+                    sys.stderr.write(f"cd: {directory}: {str(e)}\n")
+                continue
+            elif command == "echo":
+                output = " ".join(args[1:]) + "\n"
+            else:
+                try:
+                    result = subprocess.run(args, capture_output=True, text=True, check=True)
+                    output = result.stdout
+                    error_output = result.stderr
+                except subprocess.CalledProcessError as e:
+                    output = e.stdout
+                    error_output = e.stderr
+                except FileNotFoundError:
+                    sys.stderr.write(f"{command}: command not found\n")
+                    continue
+                
+            if output_file:
+                try:
+                    with open(output_file, "w") as f:
+                        f.write(output)
+                except Exception as e:
+                    sys.stderr.write(f"Error writing to file {output_file}: {e}\n")
+            else:
+                sys.stdout.write(output)
+            sys.stdout.flush()
+            if error_output:
+                sys.stderr.write(error_output)
+                sys.stderr.flush()
         except EOFError:
+            sys.stdout.write("\n")
             break
         except Exception as e:
-            print(f"Error: {e}")
+            sys.stderr.write(f"Error: {e}\n")
+            sys.stderr.flush()
 
 if __name__ == "__main__":
-    shell()
+    main()
