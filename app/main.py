@@ -1,130 +1,130 @@
-import os
 import sys
-import shlex
-import pathlib
+import os
 import readline
-import subprocess  # Add this import to handle external commands
-from typing import Final, TextIO, Mapping
+import shlex
+import subprocess
 
-# Constants
-SHELL_BUILTINS: Final[list[str]] = [
-    "echo",
-    "exit",
-    "type",
-    "pwd",
-    "cd",
-]
+TAB_PRESSED = 0  # Track tab presses
 
-def parse_programs_in_path(path: str, programs: dict[str, pathlib.Path]) -> None:
-    """Creates a mapping of programs in path to their paths"""
-    for p, _, bins in pathlib.Path(path).walk():
-        for b in bins:
-            programs[b] = p / b
+def find_executables(prefix):
+    """Find all executable files in PATH that start with the given prefix."""
+    matches = []
+    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
 
-def generate_program_paths() -> Mapping[str, pathlib.Path]:
-    programs: dict[str, pathlib.Path] = {}
-    for p in (os.getenv("PATH") or "").split(":"):
-        parse_programs_in_path(p, programs)
-    return programs
+    for directory in path_dirs:
+        try:
+            for filename in os.listdir(directory):
+                if filename.startswith(prefix) and os.access(os.path.join(directory, filename), os.X_OK):
+                    matches.append(filename)
+        except FileNotFoundError:
+            continue  # Skip missing directories in PATH
+    
+    return sorted(matches)  # Return sorted list for consistent ordering
 
-PROGRAMS_IN_PATH: Final[Mapping[str, pathlib.Path]] = {**generate_program_paths()}
-COMPLETIONS: Final[list[str]] = [*SHELL_BUILTINS, *PROGRAMS_IN_PATH.keys()]
+def completer(text, state):
+    """Autocomplete function for executables and built-in commands."""
+    global TAB_PRESSED
+    builtin = ["echo", "exit", "type", "pwd", "cd"]
+    matches = [cmd for cmd in builtin if cmd.startswith(text)]
+    
+    # If no built-in matches, search for executables
+    if not matches:
+        matches = find_executables(text)
 
-def display_matches(substitution, matches, longest_match_length):
-    """Displays autocompletion matches"""
-    print()
-    if matches:
-        print("  ".join(matches))
-    print("$ " + substitution, end="")
+    if state == 0:
+        if len(matches) > 1:
+            if TAB_PRESSED == 0:
+                sys.stdout.write("\a")  # Ring the bell on the first Tab press
+                sys.stdout.flush()
+                TAB_PRESSED += 1
+                return None
+            elif TAB_PRESSED == 1:
+                sys.stdout.write("\n" + "  ".join(matches) + "\n$ " + text)
+                sys.stdout.flush()
+                TAB_PRESSED = 0  # Reset counter
+                return None
+        TAB_PRESSED = 0  # Reset counter if only one match
 
-def complete(text: str, state: int) -> str | None:
-    """Provides autocompletion"""
-    matches = list(set([s for s in COMPLETIONS if s.startswith(text)]))
-    if len(matches) == 1:
-        return matches[state] + " " if state < len(matches) else None
-    return matches[state] if state < len(matches) else None
-
-# Set up readline for autocompletion
-readline.set_completion_display_matches_hook(display_matches)
-readline.parse_and_bind("tab: complete")
-readline.set_completer(complete)
+    return matches[state] + " " if state < len(matches) else None
 
 def main():
-    current_dir = os.getcwd()  # Track the current directory for `cd`
+    global TAB_PRESSED
+    builtin = ["echo", "exit", "type", "pwd", "cd"]
+    PATH = os.environ.get("PATH")
+    HOME = os.environ.get("HOME")  # Get the user's home directory
+    
+    # Set up autocomplete
+    readline.set_completer(completer)
+    readline.parse_and_bind("tab: complete")
     
     while True:
         sys.stdout.write("$ ")
-        cmds = shlex.split(input())
-        out = sys.stdout
-        err = sys.stderr
-        close_out = False
-        close_err = False
+        sys.stdout.flush()
         try:
-            # Handle output redirection (standard and error)
-            if ">" in cmds:
-                out_index = cmds.index(">")
-                out = open(cmds[out_index + 1], "w")
-                close_out = True
-                cmds = cmds[:out_index] + cmds[out_index + 2:]
-            elif "1>" in cmds:
-                out_index = cmds.index("1>")
-                out = open(cmds[out_index + 1], "w")
-                close_out = True
-                cmds = cmds[:out_index] + cmds[out_index + 2:]
-            if "2>" in cmds:
-                out_index = cmds.index("2>")
-                err = open(cmds[out_index + 1], "w")
-                close_err = True
-                cmds = cmds[:out_index] + cmds[out_index + 2:]
-            if ">>" in cmds:
-                out_index = cmds.index(">>")
-                out = open(cmds[out_index + 1], "a")
-                close_out = True
-                cmds = cmds[:out_index] + cmds[out_index + 2:]
+            command_line = input().strip()
+            if not command_line:
+                continue
+            args = shlex.split(command_line)
 
-            # Execute the command
-            if cmds:
-                if cmds[0] in SHELL_BUILTINS:
-                    if cmds[0] == "exit":
-                        break
-                    elif cmds[0] == "cd":
-                        if len(cmds) > 1:
-                            target_dir = cmds[1]
-                            if target_dir == "~":
-                                target_dir = os.path.expanduser("~")  # Expand ~ to home directory
-                            try:
-                                os.chdir(target_dir)
-                                current_dir = os.getcwd()
-                            except FileNotFoundError:
-                                err.write(f"{target_dir}: No such file or directory\n")
-                        else:
-                            os.chdir(os.path.expanduser("~"))
-                            current_dir = os.getcwd()
-                    elif cmds[0] == "pwd":
-                        out.write(f"{current_dir}\n")
-                    elif cmds[0] == "type":
-                        if len(cmds) > 1:
-                            # Adjusted to meet test case expectations
-                            if cmds[1] == "pwd":
-                                out.write(f"{cmds[1]} is a shell builtin\n")
-                            else:
-                                out.write(f"{cmds[1]} is a shell built-in command.\n")
-                    elif cmds[0] == "echo":
-                        out.write(" ".join(cmds[1:]) + "\n")
+            command = args[0]
+            if command == "exit":
+                sys.exit(0)
+            elif command == "echo":
+                sys.stdout.write(" ".join(args[1:]) + "\n")
+                sys.stdout.flush()
+            elif command == "pwd":
+                sys.stdout.write(os.getcwd() + "\n")
+                sys.stdout.flush()
+            elif command == "cd":
+                directory = args[1] if len(args) > 1 else HOME
+                if directory == "~":
+                    directory = HOME
+                try:
+                    os.chdir(directory)
+                except Exception as e:
+                    sys.stderr.write(f"cd: {directory}: {str(e)}\n")
+                    sys.stderr.flush()
+            elif command == "type":
+                if len(args) < 2:
+                    sys.stderr.write("type: missing argument\n")
                 else:
-                    # Handle external commands using subprocess
+                    new_command = args[1]
+                    cmd_path = None
+                    for path in PATH.split(os.pathsep):
+                        full_path = os.path.join(path, new_command)
+                        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
+                            cmd_path = full_path
+                            break
+                    if new_command in builtin:
+                        sys.stdout.write(f"{new_command} is a shell builtin\n")
+                    elif cmd_path:
+                        sys.stdout.write(f"{new_command} is {cmd_path}\n")
+                    else:
+                        sys.stderr.write(f"{new_command}: not found\n")
+                sys.stdout.flush()
+            else:
+                cmd_path = None
+                for path in PATH.split(os.pathsep):
+                    full_path = os.path.join(path, command)
+                    if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
+                        cmd_path = full_path
+                        break
+                if cmd_path:
                     try:
-                        subprocess.run(cmds, stdout=out, stderr=err)
-                    except FileNotFoundError:
-                        err.write(f"{cmds[0]}: command not found\n")
+                        result = subprocess.run(args, capture_output=True, text=True)
+                        sys.stdout.write(result.stdout)
+                        sys.stderr.write(result.stderr)
+                    except Exception as e:
+                        sys.stderr.write(f"Error executing command: {e}\n")
+                else:
+                    sys.stderr.write(f"{command}: command not found\n")
+                sys.stdout.flush()
+        except EOFError:
+            sys.stdout.write("\n")
+            break
         except Exception as e:
-            err.write(f"Error: {str(e)}\n")
-        finally:
-            # Close files if needed
-            if close_out:
-                out.close()
-            if close_err:
-                err.close()
+            sys.stderr.write(f"Error: {e}\n")
+            sys.stdout.flush()
 
 if __name__ == "__main__":
     main()
