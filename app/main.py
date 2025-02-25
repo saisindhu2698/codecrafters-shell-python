@@ -4,51 +4,45 @@ import readline
 import shlex
 import subprocess
 
-TAB_PRESSED = 0  # Track tab presses
+# Global dictionary to track autocomplete state
+auto_complete_state = {}
 
-def find_executables(prefix):
-    """Find all executable files in PATH that start with the given prefix."""
+def completer(text, state):
+    """Autocomplete function for built-in commands and external executables in PATH."""
+    builtin = ["echo", "exit", "type", "pwd", "cd"]
     matches = []
+    
+    # Check for built-in commands
+    matches.extend([cmd for cmd in builtin if cmd.startswith(text)])
+    
+    # Check for external executable commands in PATH
     path_dirs = os.environ.get("PATH", "").split(os.pathsep)
-
     for directory in path_dirs:
         try:
             for filename in os.listdir(directory):
-                if filename.startswith(prefix) and os.access(os.path.join(directory, filename), os.X_OK):
+                if filename.startswith(text) and os.access(os.path.join(directory, filename), os.X_OK):
                     matches.append(filename)
         except FileNotFoundError:
-            continue  # Skip missing directories in PATH
+            continue  # Ignore missing directories
     
-    return sorted(matches)  # Return sorted list for consistent ordering
-
-def completer(text, state):
-    """Autocomplete function for executables and built-in commands."""
-    global TAB_PRESSED
-    builtin = ["echo", "exit", "type", "pwd", "cd"]
-    matches = [cmd for cmd in builtin if cmd.startswith(text)]
+    # If there are multiple matches, handle tab completion behavior
+    if len(matches) > 1:
+        if text in auto_complete_state and auto_complete_state[text] == 1:
+            print("\n" + "  ".join(matches))  # Print matches separated by 2 spaces
+            sys.stdout.write("$ " + text)  # Reprint prompt with the current input
+            sys.stdout.flush()
+            auto_complete_state[text] = 0  # Reset state
+            return None
+        else:
+            sys.stdout.write("\a")  # Ring a bell
+            sys.stdout.flush()
+            auto_complete_state[text] = 1  # Set state to indicate first tab press
+            return None
     
-    # If no built-in matches, search for executables
-    if not matches:
-        matches = find_executables(text)
-
-    if state == 0:
-        if len(matches) > 1:
-            if TAB_PRESSED == 0:
-                sys.stdout.write("\a")  # Ring the bell on the first Tab press
-                sys.stdout.flush()
-                TAB_PRESSED += 1
-                return None
-            elif TAB_PRESSED == 1:
-                sys.stdout.write("\n" + "  ".join(matches) + "\n$ " + text)
-                sys.stdout.flush()
-                TAB_PRESSED = 0  # Reset counter
-                return None
-        TAB_PRESSED = 0  # Reset counter if only one match
-
     return matches[state] + " " if state < len(matches) else None
 
+
 def main():
-    global TAB_PRESSED
     builtin = ["echo", "exit", "type", "pwd", "cd"]
     PATH = os.environ.get("PATH")
     HOME = os.environ.get("HOME")  # Get the user's home directory
@@ -64,9 +58,10 @@ def main():
             command_line = input().strip()
             if not command_line:
                 continue
+            
             args = shlex.split(command_line)
-
             command = args[0]
+            
             if command == "exit":
                 sys.exit(0)
             elif command == "echo":
@@ -81,9 +76,13 @@ def main():
                     directory = HOME
                 try:
                     os.chdir(directory)
+                except FileNotFoundError:
+                    sys.stderr.write(f"cd: {directory}: No such file or directory\n")
+                except PermissionError:
+                    sys.stderr.write(f"cd: {directory}: Permission denied\n")
                 except Exception as e:
                     sys.stderr.write(f"cd: {directory}: {str(e)}\n")
-                    sys.stderr.flush()
+                sys.stdout.flush()
             elif command == "type":
                 if len(args) < 2:
                     sys.stderr.write("type: missing argument\n")
