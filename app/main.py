@@ -16,8 +16,9 @@ def completer(text, state):
             continue
     matches = sorted(matches)
     if state < len(matches):
-        return matches[state] + " "  # Adding a space after the completion
+        return matches[state]  # Return the matched command without extra space
     return None
+
 
 def main():
     HOME = os.environ.get("HOME", "")
