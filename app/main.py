@@ -26,7 +26,7 @@ def completer(text, state):
             continue
     matches = sorted(matches)
     if state < len(matches):
-        return matches[state] + " "
+        return matches[state]
     return None
 
 def main():
