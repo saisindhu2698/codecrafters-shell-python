@@ -22,7 +22,7 @@ def parse_programs_in_path(path: str, programs: dict[str, pathlib.Path]) -> None
 
 def generate_program_paths() -> Mapping[str, pathlib.Path]:
     programs: dict[str, pathlib.Path] = {}
-    for p in (os.getenv("PATH") or "").split(":"):
+    for p in (os.getenv("PATH") or "").split(os.pathsep):
         parse_programs_in_path(p, programs)
     return programs
 
@@ -57,6 +57,7 @@ readline.set_completer(complete)
 readline.parse_and_bind("tab: complete")
 
 def main():
+    tab_press_count = 0
     while True:
         sys.stdout.write("$ ")
         sys.stdout.flush()
