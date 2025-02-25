@@ -17,7 +17,6 @@ SHELL_BUILTINS: Final[list[str]] = [
 
 
 def parse_programs_in_path(path: str, programs: dict[str, pathlib.Path]) -> None:
-    """Creates a mapping of programs in path to their paths"""
     for p, _, bins in pathlib.Path(path).walk():
         for b in bins:
             programs[b] = p / b
@@ -37,23 +36,23 @@ COMPLETIONS: Final[list[str]] = [*SHELL_BUILTINS, *PROGRAMS_IN_PATH.keys()]
 def display_matches(substitution, matches, longest_match_length):
     if matches:
         print()
-        print("  ".join(matches))  # Two spaces between matches
+        print("  ".join(matches))
     print("$ " + substitution, end="")
 
 
 def complete(text: str, state: int) -> str | None:
     matches = list(set([s for s in COMPLETIONS if s.startswith(text)]))
-    matches.sort()  # Sort here for all cases
+    matches.sort()
 
     if len(matches) > 1:
-        if state == 0:  # First tab press
+        if state == 0:
             readline.set_completion_display_matches_hook(display_matches)
-            return None  # Ring bell, display matches on next tab press
-        else:  # Second tab press and subsequent
-            return None  # readline handles insertion
+            return None
+        else:
+            return None
 
     elif len(matches) == 1:
-        return matches[0] + " " if state == 0 else None  # Single match, add space
+        return matches[0] + " " if state == 0 else None
 
     return None
 
@@ -65,7 +64,7 @@ readline.parse_and_bind("tab: complete")
 def main():
     while True:
         sys.stdout.write("$ ")
-        sys.stdout.flush()  # Crucial: Flush stdout after prompt
+        sys.stdout.flush()
         try:
             command_line = input()
             cmds = shlex.split(command_line)
@@ -117,14 +116,14 @@ def main():
                     err.close()
 
             if command_line and (len(complete(command_line.split()[0], 0)) == 1 or len(complete(command_line.split()[0], 0)) == 0):
-                sys.stdout.write(" ")  # Space after command execution
+                sys.stdout.write(" ")
                 sys.stdout.flush()
 
         except EOFError:
-            print()  # Handle Ctrl+D
+            print()
             break
 
-        except KeyboardInterrupt:  # Handle Ctrl+C
+        except KeyboardInterrupt:
             print()
             break
 
@@ -135,7 +134,7 @@ def handle_all(cmds: list[str], out: TextIO, err: TextIO):
             out.write(" ".join(s) + "\n")
         case ["type", s]:
             type_command(s, out, err)
-        case ["exit"]:  # Exit with any code
+        case ["exit"]:
             sys.exit(0)
         case ["pwd"]:
             out.write(f"{os.getcwd()}\n")
@@ -170,7 +169,7 @@ def cd(path: str, out: TextIO, err: TextIO) -> None:
         return
     try:
         os.chdir(p)
-    except OSError as e:  # Handle cd errors gracefully
+    except OSError as e:
         out.write(f"cd: {path}: {e}\n")
 
 
