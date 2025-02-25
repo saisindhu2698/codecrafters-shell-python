@@ -44,6 +44,9 @@ def main():
                 continue
             
             command = args[0]
+            output = ""
+            error_output = ""
+            
             if command == "exit":
                 sys.exit(0)
             elif command == "pwd":
@@ -53,7 +56,7 @@ def main():
                 try:
                     os.chdir(directory)
                 except Exception as e:
-                    sys.stderr.write(f"cd: {directory}: {str(e)}\n")
+                    error_output = f"cd: {directory}: {str(e)}\n"
                 continue
             elif command == "echo":
                 output = " ".join(args[1:]) + "\n"
@@ -66,18 +69,18 @@ def main():
                     output = e.stdout
                     error_output = e.stderr
                 except FileNotFoundError:
-                    sys.stderr.write(f"{command}: command not found\n")
-                    continue
-                
+                    error_output = f"{command}: command not found\n"
+            
             if output_file:
                 try:
                     with open(output_file, "w") as f:
                         f.write(output)
                 except Exception as e:
-                    sys.stderr.write(f"Error writing to file {output_file}: {e}\n")
+                    error_output += f"Error writing to file {output_file}: {e}\n"
             else:
                 sys.stdout.write(output)
-            sys.stdout.flush()
+                sys.stdout.flush()
+            
             if error_output:
                 sys.stderr.write(error_output)
                 sys.stderr.flush()
