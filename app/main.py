@@ -27,25 +27,35 @@ def display_matches(substitution, matches, longest_match_length):
         print("  ".join(matches))
     print("$ " + substitution, end="")
     sys.stdout.flush()
-
 def complete(text: str, state: int) -> str | None:
     matches = list(set([s for s in COMPLETIONS if s.startswith(text)]))
     matches.sort()
 
     if len(matches) > 1:
-        if state == 0:
-            readline.set_completion_display_matches_hook(display_matches)
-            readline.redisplay()
-            return None
-        else:
+        if state == 0:  # First tab press
+            sys.stdout.write("\a")  # Ring the bell
+            sys.stdout.flush()
+            return None  # Important: Return None for multiple matches
+
+        elif state is None: # Second tab press (state becomes None)
+            output_string = "  ".join(matches)
+            print() # Newline before matches
+            print(output_string) # Print the matches
+            print("$ " + text, end="") #Print the prompt with the typed text
+            sys.stdout.flush()
+            return None # Important: Return None after printing matches
+
+        else: # Subsequent tab presses (try to complete)
             try:
                 return matches[state] + " " if state < len(matches) else None
             except IndexError:
                 return None
+
     elif len(matches) == 1:
         return matches[state] + " " if state < len(matches) else None
     return None
 
+# readline.set_completion_display_matches_hook(display_matches)  # Remove this line
 readline.set_completer(complete)
 readline.parse_and_bind("tab: complete")
 
