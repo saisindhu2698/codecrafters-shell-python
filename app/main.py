@@ -43,26 +43,45 @@ def completer(text, state):
     
     return matches[state] + " " if state < len(matches) else None
 
-def execute_command(args, redirect_file=None):
+def execute_command(args, redirect_file=None, redirect_stderr=None):
     builtin = ["echo", "exit", "type", "pwd", "cd"]
     PATH = os.environ.get("PATH")
     HOME = os.environ.get("HOME")
     command = args[0]
-    
-    # If redirection is specified, open the file and set it as our target output.
+
+    # Prepare stdout redirection if needed.
     if redirect_file:
         try:
-            f = open(redirect_file, "w")
+            f_stdout = open(redirect_file, "w")
         except Exception as e:
             sys.stderr.write(f"Error opening {redirect_file}: {e}\n")
             return
-        target_stdout = f
+        target_stdout = f_stdout
     else:
         target_stdout = sys.stdout
+
+    # Prepare stderr redirection if needed.
+    if redirect_stderr:
+        try:
+            f_stderr = open(redirect_stderr, "w")
+        except Exception as e:
+            sys.stderr.write(f"Error opening {redirect_stderr}: {e}\n")
+            if redirect_file:
+                f_stdout.close()
+            return
+        target_stderr = f_stderr
+    else:
+        target_stderr = sys.stderr
+
+    # For builtins, if we need to redirect stderr, temporarily replace sys.stderr.
+    original_stderr = sys.stderr
+    if redirect_stderr:
+        sys.stderr = target_stderr
 
     if command == "exit":
         sys.exit(0)
     elif command == "echo":
+        # echo writes to stdout only.
         target_stdout.write(" ".join(args[1:]) + "\n")
         target_stdout.flush()
     elif command == "pwd":
@@ -100,7 +119,7 @@ def execute_command(args, redirect_file=None):
                 sys.stderr.write(f"{new_command}: not found\n")
         target_stdout.flush()
     else:
-        # External command: find in PATH
+        # External command: locate in PATH.
         cmd_path = None
         for path in PATH.split(os.pathsep):
             full_path = os.path.join(path, command)
@@ -109,9 +128,18 @@ def execute_command(args, redirect_file=None):
                 break
         if cmd_path:
             try:
-                if redirect_file:
-                    result = subprocess.run(args, stdout=target_stdout, stderr=subprocess.PIPE, text=True)
-                    if result.stderr:
+                # For external commands, pass file handles to subprocess.run.
+                if redirect_file or redirect_stderr:
+                    result = subprocess.run(
+                        args,
+                        stdout=(target_stdout if redirect_file else subprocess.PIPE),
+                        stderr=(target_stderr if redirect_stderr else subprocess.PIPE),
+                        text=True
+                    )
+                    # If we didn't redirect stdout/stderr, then print captured output.
+                    if not redirect_file:
+                        sys.stdout.write(result.stdout)
+                    if not redirect_stderr:
                         sys.stderr.write(result.stderr)
                 else:
                     result = subprocess.run(args, capture_output=True, text=True)
@@ -121,8 +149,15 @@ def execute_command(args, redirect_file=None):
                 sys.stderr.write(f"Error executing command: {e}\n")
         else:
             sys.stderr.write(f"{command}: command not found\n")
+
+    # Restore original stderr if it was replaced.
+    if redirect_stderr:
+        sys.stderr = original_stderr
+
     if redirect_file:
-        f.close()
+        f_stdout.close()
+    if redirect_stderr:
+        f_stderr.close()
     sys.stdout.flush()
 
 def main():
@@ -139,28 +174,42 @@ def main():
 
             # Use shlex to properly split the command line.
             args = shlex.split(command_line)
-            
-            # Check for output redirection operators: ">" or "1>"
-            redirect_op = None
+
+            # Initialize redirection variables.
+            redirect_stdout = None
+            redirect_stderr = None
+
+            # Check for stderr redirection first (operator "2>")
+            if "2>" in args:
+                idx = args.index("2>")
+                if idx + 1 >= len(args):
+                    sys.stderr.write("Syntax error: expected filename after '2>'\n")
+                    continue
+                redirect_stderr = args[idx + 1]
+                # Remove the operator and filename.
+                args = args[:idx] + args[idx+2:]
+
+            # Check for stdout redirection (operators ">" or "1>")
             if ">" in args:
-                redirect_op = ">"
+                idx = args.index(">")
+                if idx + 1 >= len(args):
+                    sys.stderr.write("Syntax error: expected filename after '>'\n")
+                    continue
+                redirect_stdout = args[idx + 1]
+                args = args[:idx]
             elif "1>" in args:
-                redirect_op = "1>"
-                
-            if redirect_op:
-                redirect_index = args.index(redirect_op)
-                if redirect_index + 1 >= len(args):
-                    sys.stderr.write("Syntax error: expected filename after redirection operator\n")
+                idx = args.index("1>")
+                if idx + 1 >= len(args):
+                    sys.stderr.write("Syntax error: expected filename after '1>'\n")
                     continue
-                redirect_file = args[redirect_index + 1]
-                # Remove redirection operator and the filename from args.
-                args = args[:redirect_index]
-                if not args:
-                    sys.stderr.write("Syntax error: no command specified before redirection\n")
-                    continue
-                execute_command(args, redirect_file=redirect_file)
-            else:
-                execute_command(args)
+                redirect_stdout = args[idx + 1]
+                args = args[:idx]
+
+            if not args:
+                sys.stderr.write("Syntax error: no command specified\n")
+                continue
+
+            execute_command(args, redirect_file=redirect_stdout, redirect_stderr=redirect_stderr)
         except EOFError:
             sys.stdout.write("\n")
             break
