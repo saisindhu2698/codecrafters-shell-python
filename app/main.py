@@ -15,7 +15,9 @@ def completer(text, state):
         except FileNotFoundError:
             continue
     matches = sorted(matches)
-    return matches[state] if state < len(matches) else None
+    if state < len(matches):
+        return matches[state] + " "  # Adding a space after the completion
+    return None
 
 def main():
     HOME = os.environ.get("HOME", "")
