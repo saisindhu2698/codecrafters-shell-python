@@ -37,7 +37,7 @@ def completer(text, state):
                 return None  # VERY IMPORTANT: Return None to signal more completions
             else:  # Second tab press (show all completions)
                 tab_pressed = False
-                output_string = "  ".join(matches)  # Regular spaces
+                output_string = " ".join(matches)  # Regular spaces
                 sys.stdout.write("\n" + output_string + "\n$ " + text)
                 sys.stdout.flush()
                 return None  # VERY IMPORTANT: Return None after showing completions
