@@ -15,19 +15,16 @@ SHELL_BUILTINS: Final[list[str]] = [
     "cd",
 ]
 
-
 def parse_programs_in_path(path: str, programs: dict[str, pathlib.Path]) -> None:
     for p, _, bins in pathlib.Path(path).walk():
         for b in bins:
             programs[b] = p / b
-
 
 def generate_program_paths() -> Mapping[str, pathlib.Path]:
     programs: dict[str, pathlib.Path] = {}
     for p in (os.getenv("PATH") or "").split(":"):
         parse_programs_in_path(p, programs)
     return programs
-
 
 PROGRAMS_IN_PATH: Final[Mapping[str, pathlib.Path]] = {**generate_program_paths()}
 COMPLETIONS: Final[list[str]] = [*SHELL_BUILTINS, *PROGRAMS_IN_PATH.keys()]
@@ -39,7 +36,6 @@ def display_matches(substitution, matches, longest_match_length):
         sys.stdout.flush() # Flush immediately after printing matches
     print("\n$ " + substitution, end="") # Prompt on the next line
     sys.stdout.flush() # Flush after printing the prompt
-
 
 def complete(text: str, state: int) -> str | None:
     matches = list(set([s for s in COMPLETIONS if s.startswith(text)]))
@@ -59,7 +55,6 @@ def complete(text: str, state: int) -> str | None:
 
 readline.set_completer(complete)
 readline.parse_and_bind("tab: complete")
-
 
 def main():
     while True:
@@ -127,7 +122,6 @@ def main():
             print()
             break
 
-
 def handle_all(cmds: list[str], out: TextIO, err: TextIO):
     match cmds:
         case ["echo", *s]:
@@ -146,7 +140,6 @@ def handle_all(cmds: list[str], out: TextIO, err: TextIO):
         case command:
             out.write(f"{' '.join(command)}: command not found\n")
 
-
 def type_command(command: str, out: TextIO, err: TextIO):
     if command in SHELL_BUILTINS:
         out.write(f"{command} is a shell builtin\n")
@@ -157,7 +150,6 @@ def type_command(command: str, out: TextIO, err: TextIO):
         return
 
     out.write(f"{command}: not found\n")
-
 
 def cd(path: str, out: TextIO, err: TextIO) -> None:
     if path.startswith("~"):
@@ -171,7 +163,6 @@ def cd(path: str, out: TextIO, err: TextIO) -> None:
         os.chdir(p)
     except OSError as e:
         out.write(f"cd: {path}: {e}\n")
-
 
 if __name__ == "__main__":
     main()
