@@ -1,107 +1,93 @@
 import sys
 import os
-import readline
-import shlex
 import subprocess
-
-def completer(text, state):
-    """Autocomplete commands and executables from the PATH environment variable."""
-    matches = []
-    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
-    for directory in path_dirs:
-        try:
-            for filename in os.listdir(directory):
-                if filename.startswith(text) and os.access(os.path.join(directory, filename), os.X_OK):
-                    matches.append(filename)
-        except FileNotFoundError:
-            continue
-    matches = sorted(matches)
-    if state < len(matches):
-        return matches[state] + " "  # Add a space after the completion for proper autocomplete
-    return None
-
-def execute_command(command_line):
-    """Process and execute the given command line."""
-    HOME = os.environ.get("HOME", "")
-    args = shlex.split(command_line)
-    output_file = None
-    
-    # Handle redirection '>' or '1>'
-    if '>' in args or '1>' in args:
-        redir_index = args.index('>') if '>' in args else args.index('1>')
-        if redir_index + 1 >= len(args):
-            sys.stderr.write("Error: No file specified for redirection\n")
-            return ""
-        output_file = args[redir_index + 1]
-        args = args[:redir_index]
-    
-    if not args:
-        return ""
-
-    command = args[0]
-    output = ""
-    error_output = ""
-
-    if command == "exit":
-        sys.exit(0)
-    elif command == "pwd":
-        output = os.getcwd() + "\n"
-    elif command == "cd":
-        directory = args[1] if len(args) > 1 else HOME
-        try:
-            os.chdir(directory)
-        except Exception as e:
-            error_output = f"cd: {directory}: {str(e)}\n"
-        return error_output
-    elif command == "echo":
-        output = " ".join(args[1:]) + "\n"
-    else:
-        try:
-            result = subprocess.run(args, capture_output=True, text=True, check=True)
-            output = result.stdout
-            error_output = result.stderr
-        except subprocess.CalledProcessError as e:
-            output = e.stdout
-            error_output = e.stderr
-        except FileNotFoundError:
-            error_output = f"{command}: command not found\n"
-    
-    if output_file:
-        try:
-            with open(output_file, "w") as f:
-                f.write(output)
-        except Exception as e:
-            error_output += f"Error writing to file {output_file}: {e}\n"
-        return output  # Return the output from the redirection handling
-    else:
-        return output + error_output
-
+def split_input(inp):
+    i = 0
+    inpList = []
+    toFile = ""
+    curWord = ""
+    while i < len(inp):
+        if inp[i] == "\\":
+            curWord += inp[i + 1]
+            i += 1
+        elif inp[i] == " ":
+            if ">" in curWord:
+                toFile = inp[i + 1 :]
+                return inpList, toFile
+            if curWord:
+                inpList.append(curWord)
+            curWord = ""
+        elif inp[i] == "'":
+            i += 1
+            while inp[i] != "'":
+                curWord += inp[i]
+                i += 1
+        elif inp[i] == '"':
+            i += 1
+            while inp[i] != '"':
+                if inp[i] == "\\" and inp[i + 1] in ["\\", "$", '"']:
+                    curWord += inp[i + 1]
+                    i += 2
+                else:
+                    curWord += inp[i]
+                    i += 1
+        else:
+            curWord += inp[i]
+        i += 1
+    inpList.append(curWord)
+    return inpList, toFile
 def main():
-    """Main function to run the shell program."""
-    readline.set_completer(completer)
-    readline.parse_and_bind("tab: complete")
-    
-    while True:
+    exited = False
+    path_list = os.environ["PATH"].split(":")
+    builtin_list = ["exit", "echo", "type", "pwd", "cd"]
+    while not exited:
+        # Uncomment this block to pass the first stage
         sys.stdout.write("$ ")
-        sys.stdout.flush()
-        try:
-            command_line = input().strip()
-            if not command_line:
-                continue
-            
-            result = execute_command(command_line)
-
-            # Output the result or error message
-            if result:
-                sys.stdout.write(result)
-                sys.stdout.flush()
-
-        except EOFError:
-            sys.stdout.write("\n")
-            break
-        except Exception as e:
-            sys.stderr.write(f"Error: {e}\n")
-            sys.stderr.flush()
-
+        # Wait for user input
+        userinp = input()
+        inpList, toFile = split_input(userinp)
+        output = ""
+        match inpList[0]:
+            case "cd":
+                path = inpList[1]
+                if path == "~":
+                    os.chdir(os.environ["HOME"])
+                elif os.path.isdir(path):
+                    os.chdir(path)
+                else:
+                    output = path + ": No such file or directory"
+            case "pwd":
+                output = os.getcwd()
+            case "type":
+                for path in path_list:
+                    if os.path.isfile(f"{path}/{inpList[1]}"):
+                        output = inpList[1] + " is " + f"{path}/{inpList[1]}"
+                        break
+                if inpList[1] in builtin_list:
+                    output = inpList[1] + " is a shell builtin"
+                if not output:
+                    output = inpList[1] + ": not found"
+            case "echo":
+                output = " ".join(inpList[1:])
+            case "exit":
+                exited = True
+            case _:
+                isCmd = False
+                for path in path_list:
+                    p = f"{path}/{inpList[0]}"
+                    if os.path.isfile(p):
+                        output = subprocess.run(
+                            [p] + inpList[1:], stdout=subprocess.PIPE, text=True
+                        ).stdout.rstrip()
+                        isCmd = True
+                        break
+                if not isCmd:
+                    output = userinp + ": command not found"
+        if not toFile:
+            if output:
+                print(output, file=sys.stdout)
+        else:
+            with open(toFile, "a") as f:
+                print(output, end="", file=f)
 if __name__ == "__main__":
     main()
