@@ -26,7 +26,7 @@ def completer(text, state):
             except FileNotFoundError:
                 continue
 
-    matches.sort()  # Sort the matches
+    matches.sort()  # Sort the matches initially
 
     if len(matches) > 1:
         if state == 0:  # First tab press
@@ -37,11 +37,12 @@ def completer(text, state):
                 return None
         elif tab_pressed:  # Second tab press
             tab_pressed = False
-            matches.sort() # Sort again! This fixes the order
+            matches.sort()  # Sort AGAIN before creating the output string!!
             output_string = "  ".join(matches)  # Two spaces
             sys.stdout.write("\n" + output_string.strip() + "\n$ " + text + " ") # Space after prompt
             sys.stdout.flush()
-            return None
+            return None  # Do nothing
+
         else:  # Subsequent tab presses
             return None
 
