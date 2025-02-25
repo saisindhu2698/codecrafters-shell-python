@@ -18,16 +18,18 @@ def longest_common_prefix(strs):
 
 def completer(text, state):
     builtin = ["echo", "exit", "type", "pwd", "cd"]
-    matches = [cmd for cmd in builtin if cmd.startswith(text)]
+    matches = set(cmd for cmd in builtin if cmd.startswith(text))
     
     path_dirs = os.environ.get("PATH", "").split(os.pathsep)
     for directory in path_dirs:
         try:
             for filename in os.listdir(directory):
                 if filename.startswith(text) and os.access(os.path.join(directory, filename), os.X_OK):
-                    matches.append(filename)
+                    matches.add(filename)
         except FileNotFoundError:
             continue
+    
+    matches = sorted(matches)
     
     if len(matches) > 1:
         common_prefix = longest_common_prefix(matches)
