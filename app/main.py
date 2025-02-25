@@ -29,19 +29,19 @@ def completer(text, state):
     matches.sort()
 
     if len(matches) > 1:
-        if state == 0:  # First tab press
+        if state == 0:
             if not tab_pressed:
                 tab_pressed = True
                 sys.stdout.write("\a")
                 sys.stdout.flush()
                 return None
-            else:  # Second tab press
+            else:
                 tab_pressed = False
-                output_string = "  ".join(matches)  # Two spaces
-                sys.stdout.write("\n" + output_string + "\n$ " + text)
+                output_string = "  ".join(matches)
+                sys.stdout.write("\n" + output_string.strip() + "\n$ " + text)  # Remove extra whitespace
                 sys.stdout.flush()
                 return None
-        else:  # Subsequent tab presses
+        else:
             tab_pressed = False
             if state < len(matches):
                 return matches[state]
@@ -55,18 +55,12 @@ def completer(text, state):
 
 
 def main():
-    # *** ISOLATION STEP 1: MINIMAL REPRODUCIBLE EXAMPLE ***
-    # Comment out everything except the following lines:
-    # sys.stdout.write("$ custom_exe_7734\n")
-    # sys.stdout.flush()
-    # return  # Exit immediately to isolate
-
-    #global tab_pressed
-    #readline.set_completer(completer)
-    #readline.parse_and_bind("tab: complete")
+    global tab_pressed
+    readline.set_completer(completer)
+    readline.parse_and_bind("tab: complete")
 
     while True:
-        sys.stdout.write("$ ") # *** ISOLATION STEP 3: CHECK PROMPT ***
+        sys.stdout.write("$ ")
         sys.stdout.flush()
         try:
             command_line = input().strip()
@@ -121,13 +115,13 @@ def main():
             else:
                 try:
                     result = subprocess.run(args, capture_output=True, text=True, check=True)
-                    sys.stdout.write(result.stdout)
-                    sys.stderr.write(result.stderr)
+                    sys.stdout.write(result.stdout.strip())  # Remove extra whitespace
+                    sys.stderr.write(result.stderr.strip())  # Remove extra whitespace
                     sys.stdout.flush()
                     sys.stderr.flush()
                 except subprocess.CalledProcessError as e:
                     sys.stderr.write(f"Error: {e}\n")
-                    sys.stderr.write(e.stderr)
+                    sys.stderr.write(e.stderr.strip())  # Remove extra whitespace
                     sys.stderr.flush()
                 except Exception as e:
                     sys.stderr.write(f"Error: {e}\n")
