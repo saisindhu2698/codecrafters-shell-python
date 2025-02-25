@@ -40,7 +40,7 @@ def completer(text, state):
             output_string = "  ".join(matches) # Two regular spaces
             sys.stdout.write("\n" + output_string.strip() + "\n$ " + text + " ") # Space after prompt
             sys.stdout.flush()
-            # readline.redisplay()  <- REMOVE this line!
+            readline.redisplay()  
             return None  # Do nothing
 
         else:  # Subsequent tab presses
