@@ -34,13 +34,14 @@ def completer(text, state):
                 tab_pressed = True
                 sys.stdout.write("\a")  # Ring the bell
                 sys.stdout.flush()
-                return None  # Important: Return None for bell ring
+                return None
         else:
             tab_pressed = False
-            output_string = "  ".join(matches) # Two regular spaces
-            sys.stdout.write("\n" + output_string.strip() + "\n$ " + text)
+            output_string = "  ".join(matches)  # Two regular spaces
+            sys.stdout.write("\n" + output_string.strip() + "\n$ " + text) # Corrected prompt printing
             sys.stdout.flush()
-            return  # Do NOT return anything here. Let readline handle insertion
+            readline.redisplay() # This is the crucial line
+            return None # Do NOT return anything here. Let readline handle insertion
 
     elif len(matches) == 1:
         if state < len(matches):
@@ -49,7 +50,6 @@ def completer(text, state):
             return None
 
     return None
-
 
 
 def main():
