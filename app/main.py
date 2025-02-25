@@ -30,22 +30,15 @@ def completer(text, state):
 
     if len(matches) > 1:
         if state == 0:
-            if not tab_pressed:
-                tab_pressed = True
-                sys.stdout.write("\a")
-                sys.stdout.flush()
-                return None
-            else:
-                tab_pressed = False
-                sys.stdout.write("\n" + " ".join(matches) + "\n$ " + text)
-                sys.stdout.flush()
-                return None
+            # ... (bell ringing code)
+            return None
         else:
-            if state < len(matches):
-                return matches[state]
-            else:
-                return None
-
+            tab_pressed = False
+            # Join with *regular* spaces
+            output_string = " ".join(matches)
+            sys.stdout.write("\n" + output_string + "\n$ " + text)
+            sys.stdout.flush()
+            return None
     return matches[state] if state < len(matches) else None
 
 
