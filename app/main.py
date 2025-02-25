@@ -29,19 +29,21 @@ def completer(text, state):
     matches.sort()
 
     if len(matches) > 1:
-        if state == 0:
+        if state == 0:  # First tab press
             if not tab_pressed:
                 tab_pressed = True
                 sys.stdout.write("\a")  # Ring the bell
                 sys.stdout.flush()
                 return None
-        else:
-            tab_pressed = False
+        elif tab_pressed:  # Second tab press
+            tab_pressed = False  # Reset tab_pressed
             output_string = "  ".join(matches)  # Two regular spaces
-            sys.stdout.write("\n" + output_string.strip() + "\n$ " + text) # Corrected prompt printing
+            sys.stdout.write("\n" + output_string.strip() + "\n$ " + text)
             sys.stdout.flush()
-            readline.redisplay() # This is the crucial line
-            return None # Do NOT return anything here. Let readline handle insertion
+            readline.redisplay()
+            return None
+        else:  # Subsequent tab presses
+            return None  # Do nothing
 
     elif len(matches) == 1:
         if state < len(matches):
@@ -65,7 +67,7 @@ def main():
             if not command_line:
                 continue
 
-            tab_pressed = False
+            tab_pressed = False  # Reset for each command
 
             args = shlex.split(command_line)
             if not args:
@@ -113,17 +115,20 @@ def main():
             else:
                 try:
                     result = subprocess.run(args, capture_output=True, text=True, check=True)
-                    sys.stdout.write(result.stdout.strip())  # Remove extra whitespace
-                    sys.stderr.write(result.stderr.strip())  # Remove extra whitespace
+                    sys.stdout.write(result.stdout.strip())
+                    sys.stderr.write(result.stderr.strip())
                     sys.stdout.flush()
                     sys.stderr.flush()
                 except subprocess.CalledProcessError as e:
                     sys.stderr.write(f"Error: {e}\n")
-                    sys.stderr.write(e.stderr.strip())  # Remove extra whitespace
+                    sys.stderr.write(e.stderr.strip())
                     sys.stderr.flush()
                 except Exception as e:
                     sys.stderr.write(f"Error: {e}\n")
                     sys.stderr.flush()
+
+            if command and (len(completer(command, 0)) == 1 or len(completer(command, 0)) == 0): #Add space after command execution
+                sys.stdout.write(" ")
 
         except EOFError:
             sys.stdout.write("\n")
