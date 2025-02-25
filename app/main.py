@@ -15,31 +15,43 @@ def completer(text, state):
 
     if not matches:
         path_dirs = os.environ.get("PATH", "").split(os.pathsep)
-        seen = set()  # Keep track of seen filenames
+        seen = set()
         for directory in path_dirs:
             try:
                 for filename in os.listdir(directory):
                     full_path = os.path.join(directory, filename)
                     if filename.startswith(text) and os.access(full_path, os.X_OK) and os.path.isfile(full_path) and filename not in seen:
                         matches.append(filename)
-                        seen.add(filename)  # Mark as seen
+                        seen.add(filename)
             except FileNotFoundError:
                 continue
 
     matches.sort()
 
     if len(matches) > 1:
-        if state == 0:
-            # ... (bell ringing code)
-            return None
-        else:
-            tab_pressed = False
-            # Join with *regular* spaces
-            output_string = " ".join(matches)
-            sys.stdout.write("\n" + output_string + "\n$ " + text)
-            sys.stdout.flush()
-            return None
-    return matches[state] if state < len(matches) else None
+        if state == 0:  # First tab press
+            if not tab_pressed:
+                tab_pressed = True
+                sys.stdout.write("\a")
+                sys.stdout.flush()
+                return None  # VERY IMPORTANT: Return None to signal more completions
+            else:  # Second tab press (show all completions)
+                tab_pressed = False
+                output_string = " ".join(matches)  # Regular spaces
+                sys.stdout.write("\n" + output_string + "\n$ " + text)
+                sys.stdout.flush()
+                return None  # VERY IMPORTANT: Return None after showing completions
+        else:  # Subsequent tab presses (try to complete)
+            tab_pressed = False # Reset tab_pressed
+            if state < len(matches):
+                return matches[state]  # Return the specific match for this state
+            else:
+                return None  # No more matches
+
+    elif len(matches) == 1: # Single match
+        return matches[state] if state < len(matches) else None
+
+    return None # No matches
 
 
 def main():
