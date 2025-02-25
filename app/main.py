@@ -37,11 +37,12 @@ def completer(text, state):
                 return None
         elif tab_pressed:  # Second tab press
             tab_pressed = False  # Reset tab_pressed
-            output_string = "  ".join(matches)  # Two regular spaces
-            sys.stdout.write("\n" + output_string.strip() + "\n$ " + text)
+            output_string = "  ".join(matches) # Two regular spaces
+            sys.stdout.write("\n" + output_string.strip() + "\n$ " + text + " ") # Space after prompt
             sys.stdout.flush()
-            readline.redisplay()
-            return None
+            # readline.redisplay()  <- REMOVE this line!
+            return None  # Do nothing
+
         else:  # Subsequent tab presses
             return None  # Do nothing
 
